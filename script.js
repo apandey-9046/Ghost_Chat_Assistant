@@ -6,6 +6,13 @@ const micButton = document.getElementById("micButton");
 const voiceButton = document.getElementById("voiceButton");
 const typingIndicator = document.getElementById("typingIndicator");
 
+// === PROMPT SYSTEM VARIABLES ===
+// Add these global variables for the prompt system
+let awaitingTaskInput = false;
+let awaitingReminderInput = false;
+let awaitingReminderTime = false;
+let tempReminderText = "";
+
 // Check if required elements exist
 if (!chatArea || !userInput || !sendButton || !micButton) {
     console.error("Chat elements not found. Check your HTML IDs.");
@@ -922,6 +929,85 @@ function getResponse(message) {
     const lower = message.toLowerCase().trim();
     const words = lower.split(/\s+/);
 
+    // Handle prompt system first
+    // If we were waiting for task input
+    if (awaitingTaskInput) {
+        awaitingTaskInput = false;
+        const task = message.trim();
+        if (!task) return "❌ Please provide a task to add.";
+
+        const tasks = getTasks();
+        tasks.push({ text: task, time: new Date().toLocaleString() });
+        saveTasks(tasks);
+        return `✅ Task added: "${task}"`;
+    }
+
+    // If we were waiting for reminder text
+    if (awaitingReminderInput) {
+        awaitingReminderInput = false;
+        awaitingReminderTime = true;
+        tempReminderText = message.trim();
+        return `⏰ "${tempReminderText}" kab remind karu? (Example: 5 minutes, 1 hour, tomorrow)`;
+    }
+
+    // If we were waiting for reminder time
+    if (awaitingReminderTime) {
+        awaitingReminderTime = false;
+        const timeText = message.trim();
+
+        // Parse time - simple parser
+        let ms = 0;
+        let displayTime = "";
+
+        if (timeText.includes("minute") || timeText.includes("min")) {
+            const match = timeText.match(/(\d+)/);
+            if (match) {
+                const minutes = parseInt(match[1]);
+                ms = minutes * 60000;
+                displayTime = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+            }
+        } else if (timeText.includes("hour")) {
+            const match = timeText.match(/(\d+)/);
+            if (match) {
+                const hours = parseInt(match[1]);
+                ms = hours * 3600000;
+                displayTime = `${hours} hour${hours !== 1 ? 's' : ''}`;
+            }
+        } else if (timeText.includes("second") || timeText.includes("sec")) {
+            const match = timeText.match(/(\d+)/);
+            if (match) {
+                const seconds = parseInt(match[1]);
+                ms = seconds * 1000;
+                displayTime = `${seconds} second${seconds !== 1 ? 's' : ''}`;
+            }
+        } else {
+            // Default to 5 minutes if can't parse
+            ms = 300000; // 5 minutes
+            displayTime = "5 minutes";
+        }
+
+        if (ms > 0) {
+            const timerId = setTimeout(() => {
+                const notificationMsg = `🔔 Reminder: ${tempReminderText}`;
+                addMessage(notificationMsg, false);
+                if (voiceEnabled) {
+                    speak(notificationMsg);
+                }
+                if (Notification.permission === "granted") {
+                    new Notification("Ghost Reminder", { body: tempReminderText });
+                }
+            }, ms);
+
+            activeReminders.push(timerId);
+            const finalText = tempReminderText;
+            tempReminderText = "";
+            return `✅ I'll remind you "${finalText}" in ${displayTime}.`;
+        } else {
+            tempReminderText = "";
+            return "❌ Invalid time format. Please try again.";
+        }
+    }
+
     // Stop command
     if (dailyConversations.stop.some(cmd => lower.includes(cmd))) {
         synth.cancel();
@@ -1244,8 +1330,17 @@ function getResponse(message) {
         }
     }
 
-    // === REMINDERS ===
-    if (lower.includes("remind me") || lower.includes("set reminder") || lower.includes("alert me in") || lower.includes("notify me")) {
+    // === REMINDERS - Enhanced ===
+    if (lower.includes("remind me") || lower.includes("set reminder") || lower.includes("alert me in") || lower.includes("notify me") || lower.includes("add reminder")) {
+        // If user just said "add reminder" or "set reminder" without details
+        if (lower.trim() === "add reminder" || lower.trim() === "set reminder" ||
+            (lower.includes("add reminder") && message.trim().toLowerCase() === "add reminder") ||
+            (lower.includes("set reminder") && message.trim().toLowerCase() === "set reminder")) {
+            awaitingReminderInput = true;
+            return "🔔 Kya reminder set karu?";
+        }
+
+        // Normal reminder parsing (existing logic)
         const remindMatch1 = lower.match(/remind me to (.+?) in (\d+) (seconds?|minutes?|hours?)/);
         const remindMatch2 = lower.match(/set a reminder for (\d+) (seconds?|minutes?|hours?)(?: to (.+?))?$/);
         const remindMatch3 = lower.match(/in (\d+) (seconds?|minutes?|hours?) remind me to (.+?)(?:$|\.)/);
@@ -1275,7 +1370,6 @@ function getResponse(message) {
                 if (voiceEnabled) {
                     speak(notificationMsg);
                 }
-                // Try to show browser notification
                 if (Notification.permission === "granted") {
                     new Notification("Ghost Reminder", { body: task });
                 }
@@ -1286,18 +1380,33 @@ function getResponse(message) {
             const displayUnit = unit.startsWith("hour") ? "hour" : unit;
             return `✅ I'll remind you to "${task}" in ${value} ${displayUnit}${value !== 1 ? 's' : ''}.`;
         }
+
+        // If reminder command but no match, ask for details
+        awaitingReminderInput = true;
+        return "🔔 Kya reminder set karu?";
     }
 
-    // === TASK MANAGER (To-Do List) ===
+
+    // === TASK MANAGER (To-Do List) - Enhanced ===
     if (lower.startsWith("add:") ||
         lower.includes("add task") ||
         lower.includes("create task") ||
         lower.includes("add new task") ||
         lower.includes("create new task") ||
         lower.includes("make a task")) {
+        // If user just said "add task" without specifying what
+        if (lower.trim() === "add task" || lower.includes("add task") && message.trim().toLowerCase() === "add task") {
+            awaitingTaskInput = true;
+            return "📝 Kya task add karu?";
+        }
+
+        // Normal task adding with direct input
         const task = message.slice(message.indexOf(":") + 1).trim() ||
             message.replace(/add task|create task|add new task|create new task|make a task/gi, "").trim();
-        if (!task) return "❌ Please provide a task to add.";
+        if (!task) {
+            awaitingTaskInput = true;
+            return "📝 Kya task add karu?";
+        }
 
         const tasks = getTasks();
         tasks.push({ text: task, time: new Date().toLocaleString() });
