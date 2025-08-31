@@ -82,40 +82,23 @@ function loadChatHistory() {
     }
 }
 
-// Text-to-Speech with Improved Voice Selection
+// Text-to-Speech with ORIGINAL Voice Selection (as you preferred)
 const synth = window.speechSynthesis;
 let isSpeaking = false;
 
-// Improved voice selection with fallbacks
-function getBestVoice() {
+// ORIGINAL voice function - your preferred one
+function getIndianMaleVoice() {
     const voices = synth.getVoices();
-
-    // Priority order for voices
-    const preferredVoices = [
-        { name: 'Google UK English Male', lang: 'en-GB' },
-        { name: 'Google US English', lang: 'en-US' },
-        { name: 'Microsoft David', lang: 'en-US' },
-        { name: 'Samantha', lang: 'en-US' }
-    ];
-
-    // Try to find preferred voices
-    for (let pref of preferredVoices) {
-        const voice = voices.find(v =>
-            v.name.includes(pref.name) &&
-            v.lang === pref.lang &&
-            !v.name.toLowerCase().includes('female')
-        );
-        if (voice) return voice;
-    }
-
-    // Fallback to any good English male voice
-    const maleVoice = voices.find(v =>
+    const indianMale = voices.find(v =>
+        v.lang === 'en-IN' &&
+        (v.name.toLowerCase().includes('ravi') || v.name.toLowerCase().includes('google'))
+    );
+    const enMale = voices.find(v =>
         v.lang.startsWith('en') &&
         !v.name.toLowerCase().includes('female') &&
-        v.name.length > 10
+        !v.name.toLowerCase().includes('priya')
     );
-
-    return maleVoice || voices[0];
+    return indianMale || enMale || voices.find(v => v.lang.startsWith('en')) || voices[0];
 }
 
 // Load voices when available
@@ -129,7 +112,7 @@ function removeEmojis(text) {
     return text.replace(emojiRegex, '').trim();
 }
 
-// Speak function with better error handling
+// ORIGINAL speak function
 function speak(text) {
     if (isSpeaking) synth.cancel();
 
@@ -137,17 +120,14 @@ function speak(text) {
     if (!cleanText) return;
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.voice = getBestVoice();
+    utterance.voice = getIndianMaleVoice(); // ORIGINAL VOICE
     utterance.rate = 0.9;
-    utterance.pitch = 1.0;
+    utterance.pitch = 1.05;
     utterance.volume = 1;
 
     utterance.onstart = () => isSpeaking = true;
     utterance.onend = () => isSpeaking = false;
-    utterance.onerror = (e) => {
-        console.error("Speech error:", e);
-        isSpeaking = false;
-    };
+    utterance.onerror = () => isSpeaking = false;
 
     synth.speak(utterance);
 }
@@ -352,24 +332,47 @@ function cancelAllReminders() {
     return "✅ All reminders cancelled.";
 }
 
-// === QUIZ SYSTEM (Global Variables) ===
+// === QUIZ SYSTEM (Global Variables) WITH SOUNDS ===
 let quizActive = false;
 let quizQuestions = [];
 let quizIndex = 0;
 let quizScore = 0;
 let quizTimer;
 
+// Create audio elements for quiz sounds
+const correctSound = new Audio("https://www.soundjay.com/buttons/sounds/button-09.mp3");
+const wrongSound = new Audio("https://www.soundjay.com/buttons/sounds/button-10.mp3");
+
+function playCorrectSound() {
+    try {
+        correctSound.currentTime = 0;
+        correctSound.play().catch(() => {});
+    } catch (e) {
+        console.log("Sound play failed");
+    }
+}
+
+function playWrongSound() {
+    try {
+        wrongSound.currentTime = 0;
+        wrongSound.play().catch(() => {});
+    } catch (e) {
+        console.log("Sound play failed");
+    }
+}
+
 // Clear quiz timer
 function clearQuizTimer() {
     if (quizTimer) clearTimeout(quizTimer);
 }
 
-// Start quiz timer (8 seconds for better UX)
+// Start quiz timer (10 seconds - original timing)
 function startQuizTimer() {
     clearQuizTimer();
     quizTimer = setTimeout(() => {
         if (quizActive && quizIndex < quizQuestions.length) {
             addMessage(`⏰ Time's up! Correct answer was: ${quizQuestions[quizIndex].answer}`, false);
+            playWrongSound(); // Add sound for timeout
             quizIndex++;
             if (quizIndex < quizQuestions.length) {
                 showNextQuestion();
@@ -377,7 +380,7 @@ function startQuizTimer() {
                 endQuiz();
             }
         }
-    }, 8000); // Reduced from 10 seconds
+    }, 10000); // Original 10 seconds
 }
 
 // Show next question
@@ -388,7 +391,7 @@ function showNextQuestion() {
     setTimeout(() => {
         addMessage(msg, false);
         startQuizTimer();
-    }, 300); // Reduced delay
+    }, 500);
 }
 
 // End quiz
@@ -400,7 +403,7 @@ function endQuiz() {
     safeSpeak(`Quiz completed! You scored ${quizScore} out of ${quizQuestions.length}.`);
 }
 
-// === ROCK PAPER SCISSORS GAME ===
+// === ROCK PAPER SCISSORS GAME - FIXED ===
 let rpsGameActive = false;
 
 // === DAILY LIFE CONVERSATIONS ===
@@ -487,12 +490,12 @@ function getResponse(message) {
         quizScore = 0;
         quizIndex = 0;
         quizQuestions = [...gkQuiz].sort(() => 0.5 - Math.random()).slice(0, 10);
-        addMessage("🎯 Quiz Started! 10 questions, 8 seconds each. Let's begin!", false);
+        addMessage("🎯 Quiz Started! 10 questions, 10 seconds each. Let's begin!", false);
         showNextQuestion();
         return;
     }
 
-    // Exit quiz
+    // Exit quiz - FIXED
     if (["exit quiz", "stop quiz", "quit quiz", "end quiz", "leave quiz"].includes(lower)) {
         if (quizActive) {
             quizActive = false;
@@ -503,8 +506,15 @@ function getResponse(message) {
         }
     }
 
-    // Handle quiz answer
+    // Handle quiz answer - FIXED WITH SOUNDS
     if (quizActive) {
+        // Check if user is trying to exit quiz
+        if (["exit quiz", "stop quiz", "quit quiz", "end quiz", "leave quiz"].includes(lower)) {
+            quizActive = false;
+            clearQuizTimer();
+            return "👋 Quiz exited. You can start again anytime!";
+        }
+
         const ans = message.trim().toUpperCase();
         const correct = quizQuestions[quizIndex].answer;
 
@@ -513,8 +523,10 @@ function getResponse(message) {
         if (ans === correct) {
             quizScore++;
             addMessage("✅ Correct!", false);
+            playCorrectSound(); // Sound for correct
         } else {
             addMessage(`❌ Wrong! Correct answer was: ${correct}`, false);
+            playWrongSound(); // Sound for wrong
         }
 
         quizIndex++;
@@ -527,7 +539,7 @@ function getResponse(message) {
         return;
     }
 
-    // === ROCK PAPER SCISSORS GAME ===
+    // === ROCK PAPER SCISSORS GAME - FIXED ===
     const rpsTriggers = [
         "rps", "rock paper scissors", "play rps", "lets play game", "game",
         "play game", "lets play rps", "play rock paper scissors"
@@ -538,12 +550,13 @@ function getResponse(message) {
     }
 
     if (rpsGameActive) {
-        const userChoice = lower;
+        const userChoice = lower.trim(); // Trim spaces
         const choices = ["rock", "paper", "scissors"];
         const botChoice = choices[Math.floor(Math.random() * 3)];
 
-        if (!choices.includes(userChoice)) {
-            return "❌ Invalid choice! Choose Rock, Paper, or Scissors.";
+        // Better choice validation
+        if (!["rock", "paper", "scissors"].includes(userChoice)) {
+            return "❌ Invalid choice! Choose: Rock, Paper, or Scissors.";
         }
 
         let result;
@@ -766,7 +779,7 @@ function getResponse(message) {
         }
     }
 
-    // Default response with better fallback
+    // Default response with better fallback options
     const defaultResponses = [
         "I'm here to help! Try asking 'what can you do' to see my features.",
         "I can help you with many things! Ask me about math, time, tasks, or just chat!",
@@ -777,7 +790,7 @@ function getResponse(message) {
     return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
 }
 
-// Send Message with Faster Response
+// Send Message with Faster Response Time
 function sendMessage() {
     const message = userInput.value.trim();
     if (!message) return;
