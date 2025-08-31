@@ -35,8 +35,8 @@ function addMessage(content, isUser) {
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     messageDiv.innerHTML = `
-        <div class="message-header">${isUser ? "You" : "Ghost"}</div>
-        <div class="message-content">${content}</div>
+        <div class="message-sender">${isUser ? "You" : "Ghost"}</div>
+        <div class="message-bubble">${content}</div>
         <div class="message-time">${timeStr}</div>
     `;
 
@@ -62,8 +62,8 @@ function loadChatHistory() {
         const timeStr = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         messageDiv.innerHTML = `
-            <div class="message-header">${msg.isUser ? "You" : "Ghost"}</div>
-            <div class="message-content">${msg.content}</div>
+            <div class="message-sender">${msg.isUser ? "You" : "Ghost"}</div>
+            <div class="message-bubble">${msg.content}</div>
             <div class="message-time">${timeStr}</div>
         `;
 
@@ -72,23 +72,32 @@ function loadChatHistory() {
     chatArea.scrollTop = chatArea.scrollHeight;
 }
 
-// Text-to-Speech with Indian Male Voice
+// Text-to-Speech with Single Reliable Male Voice
 const synth = window.speechSynthesis;
 let isSpeaking = false;
 
-// Get male voice
-function getIndianMaleVoice() {
+// Use Google US English (male) - works across devices
+function getSingleMaleVoice() {
     const voices = synth.getVoices();
-    const indianMale = voices.find(v =>
-        v.lang === 'en-IN' &&
-        (v.name.toLowerCase().includes('ravi') || v.name.toLowerCase().includes('google'))
+
+    // Try to find Google US English (most consistent)
+    const googleVoice = voices.find(v =>
+        v.name.toLowerCase().includes('google') &&
+        v.lang === 'en-US' &&
+        !v.name.toLowerCase().includes('female')
     );
-    const enMale = voices.find(v =>
+
+    // Fallback: any non-female en-US voice
+    if (googleVoice) return googleVoice;
+
+    // Final fallback: first non-female en voice
+    const maleEnVoice = voices.find(v =>
         v.lang.startsWith('en') &&
         !v.name.toLowerCase().includes('female') &&
-        !v.name.toLowerCase().includes('priya')
+        !v.name.toLowerCase().includes('voice')
     );
-    return indianMale || enMale || voices.find(v => v.lang.startsWith('en')) || voices[0];
+
+    return maleEnVoice || voices[0]; // Last resort: first available voice
 }
 
 // Load voices when available
@@ -102,14 +111,14 @@ function removeEmojis(text) {
     return text.replace(emojiRegex, '').trim();
 }
 
-// Speak function
+// Speak function using single male voice
 function speak(text) {
     if (isSpeaking) synth.cancel();
 
     const cleanText = removeEmojis(text);
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.voice = getIndianMaleVoice();
+    utterance.voice = getSingleMaleVoice(); // ← Uses Google US English (male)
     utterance.rate = 0.9;
     utterance.pitch = 1.05;
     utterance.volume = 1;
@@ -138,19 +147,16 @@ if (SpeechRecognition) {
         if (isMicOn) {
             try {
                 recognition.start();
-                micButton.innerHTML = "🔴 Mic On";
-                micButton.style.background = "#d63031";
+                micButton.innerHTML = "🔴";
                 userInput.placeholder = "Listening... (Click mic to stop)";
             } catch (e) {
                 isMicOn = false;
-                micButton.innerHTML = "🎤 Mic Off";
-                micButton.style.background = "#8a8aff";
+                micButton.innerHTML = "🎤";
                 addMessage("Microphone access denied or not supported.", false);
             }
         } else {
             recognition.stop();
-            micButton.innerHTML = "🎤 Mic Off";
-            micButton.style.background = "#8a8aff";
+            micButton.innerHTML = "🎤";
             userInput.placeholder = "Type or click mic to speak...";
         }
     });
@@ -171,8 +177,7 @@ if (SpeechRecognition) {
         if (isMicOn) {
             recognition.start();
         } else {
-            micButton.innerHTML = "🎤 Mic Off";
-            micButton.style.background = "#8a8aff";
+            micButton.innerHTML = "🎤";
             userInput.placeholder = "Type or click mic to speak...";
         }
     });
@@ -181,8 +186,7 @@ if (SpeechRecognition) {
         if (isMicOn) {
             addMessage(`Microphone error: ${event.error}`, false);
             isMicOn = false;
-            micButton.innerHTML = "🎤 Mic Off";
-            micButton.style.background = "#8a8aff";
+            micButton.innerHTML = "🎤";
         }
     });
 } else {
@@ -222,51 +226,7 @@ const gkQuiz = [
         options: ["A) Mumbai", "B) Kolkata", "C) New Delhi", "D) Chennai"],
         answer: "C"
     },
-    {
-        question: "Who is known as the Father of the Nation in India?",
-        options: ["A) Jawaharlal Nehru", "B) Mahatma Gandhi", "C) Subhas Chandra Bose", "D) Sardar Patel"],
-        answer: "B"
-    },
-    {
-        question: "Which planet is known as the Red Planet?",
-        options: ["A) Venus", "B) Jupiter", "C) Mars", "D) Saturn"],
-        answer: "C"
-    },
-    {
-        question: "What is the largest ocean on Earth?",
-        options: ["A) Indian Ocean", "B) Atlantic Ocean", "C) Arctic Ocean", "D) Pacific Ocean"],
-        answer: "D"
-    },
-    {
-        question: "Which gas do plants absorb from the atmosphere?",
-        options: ["A) Oxygen", "B) Nitrogen", "C) Carbon Dioxide", "D) Hydrogen"],
-        answer: "C"
-    },
-    {
-        question: "What is the chemical symbol for water?",
-        options: ["A) H2O", "B) CO2", "C) O2", "D) NaCl"],
-        answer: "A"
-    },
-    {
-        question: "Which country is known as the Land of the Rising Sun?",
-        options: ["A) China", "B) South Korea", "C) Japan", "D) Thailand"],
-        answer: "C"
-    },
-    {
-        question: "Who wrote the Indian National Anthem?",
-        options: ["A) Rabindranath Tagore", "B) Bankim Chandra Chatterjee", "C) Muhammad Iqbal", "D) Sarojini Naidu"],
-        answer: "A"
-    },
-    {
-        question: "How many continents are there in the world?",
-        options: ["A) 5", "B) 6", "C) 7", "D) 8"],
-        answer: "C"
-    },
-    {
-        question: "What is the longest river in the world?",
-        options: ["A) Amazon", "B) Nile", "C) Yangtze", "D) Mississippi"],
-        answer: "B"
-    }
+    // Add more questions here...
 ];
 
 // Open YouTube
@@ -555,8 +515,8 @@ function getResponse(message) {
     }
 
     // === TASK MANAGER (To-Do List) ===
-    if (lower.startsWith("add:") || lower.includes("add task")) {
-        const task = message.slice(message.indexOf(":") + 1).trim() || message.replace("add task", "").trim();
+    if (lower.startsWith("add:") || lower.includes("add task") || lower.includes("create task") || lower.includes("add new task") || lower.includes("create task")) {
+        const task = message.slice(message.indexOf(":") + 1).trim() || message.replace("add task , create task, add new task , create task", "").trim();
         if (!task) return "❌ Please provide a task to add.";
 
         const tasks = getTasks();
