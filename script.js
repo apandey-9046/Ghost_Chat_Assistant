@@ -207,66 +207,65 @@ let featureList = `
 ✅ <strong>Flashcards:</strong> "Teach me 5 Spanish words"<br>
 ✅ <strong>Jokes & Fun:</strong> "Tell me a joke"<br>
 ✅ <strong>Reminders:</strong> "Remind me to drink water in 5 min"<br>
-✅ <strong>Quiz:</strong> "Let's play quiz"<br>
+✅ <strong>Quiz:</strong> "Let's play quiz", "Start quiz", "Quiz time"<br>
 ✅ <strong>Stop:</strong> Say "Stop" to cancel anything<br><br>
 Just ask me anything! 😊
 `.trim();
 
 const featureVoiceMessage = "Here are the things I can help you with!";
 
-// === GENERAL KNOWLEDGE QUIZ QUESTIONS & ANSWERS ===
+// === GENERAL KNOWLEDGE QUIZ QUESTIONS & ANSWERS (with A/B/C/D options) ===
 const gkQuiz = [
-    { question: "What is the capital of India?", answer: "New Delhi" },
-    { question: "Who is known as the Father of the Nation in India?", answer: "Mahatma Gandhi" },
-    { question: "Which planet is known as the Red Planet?", answer: "Mars" },
-    { question: "What is the largest ocean on Earth?", answer: "Pacific Ocean" },
-    { question: "Which gas do plants absorb from the atmosphere?", answer: "Carbon Dioxide" },
-    { question: "What is the chemical symbol for water?", answer: "H2O" },
-    { question: "Which country is known as the Land of the Rising Sun?", answer: "Japan" },
-    { question: "Who wrote the Indian National Anthem?", answer: "Rabindranath Tagore" },
-    { question: "How many continents are there in the world?", answer: "7" },
-    { question: "What is the longest river in the world?", answer: "Nile River" },
-    { question: "Which animal is known as the 'Ship of the Desert'?", answer: "Camel" },
-    { question: "What is the tallest mountain in the world?", answer: "Mount Everest" },
-    { question: "Which planet is closest to the Sun?", answer: "Mercury" },
-    { question: "What is the smallest country in the world?", answer: "Vatican City" },
-    { question: "Which organ pumps blood in the human body?", answer: "Heart" },
-    { question: "Which language is spoken in Brazil?", answer: "Portuguese" },
-    { question: "What is the currency of Japan?", answer: "Yen" },
-    { question: "Which planet has rings around it?", answer: "Saturn" },
-    { question: "Who invented the telephone?", answer: "Alexander Graham Bell" },
-    { question: "What is the largest desert in the world?", answer: "Sahara Desert" },
-    { question: "Which country hosted the 2020 Summer Olympics?", answer: "Japan" },
-    { question: "What is the capital of Australia?", answer: "Canberra" },
-    { question: "Which gas is most abundant in Earth's atmosphere?", answer: "Nitrogen" },
-    { question: "Who painted the Mona Lisa?", answer: "Leonardo da Vinci" },
-    { question: "What is the largest mammal in the world?", answer: "Blue Whale" },
-    { question: "Which country is the largest by area?", answer: "Russia" },
-    { question: "In which year did India gain independence?", answer: "1947" },
-    { question: "What is the full form of WWW?", answer: "World Wide Web" },
-    { question: "Which is the coldest place on Earth?", answer: "Antarctica" },
-    { question: "Which metal is liquid at room temperature?", answer: "Mercury" },
-    { question: "Which country is known as the Gift of the Nile?", answer: "Egypt" },
-    { question: "Who is the author of 'Harry Potter' series?", answer: "J.K. Rowling" },
-    { question: "Which is the largest state in India by area?", answer: "Rajasthan" },
-    { question: "Which planet is known for the Great Red Spot?", answer: "Jupiter" },
-    { question: "What is the national bird of India?", answer: "Peacock" },
-    { question: "Which country has the most population?", answer: "India" },
-    { question: "What is the capital of Canada?", answer: "Ottawa" },
-    { question: "Which element has the chemical symbol 'O'?", answer: "Oxygen" },
-    { question: "Which is the fastest animal on land?", answer: "Cheetah" },
-    { question: "Who discovered gravity?", answer: "Isaac Newton" },
-    { question: "What is the national animal of India?", answer: "Tiger" },
-    { question: "Which country is known as the Silicon Valley of India?", answer: "Bangalore" },
-    { question: "Which is the longest wall in the world?", answer: "Great Wall of China" },
-    { question: "Which planet is called Earth's twin?", answer: "Venus" },
-    { question: "Which is the smallest continent?", answer: "Australia" },
-    { question: "What is the capital of France?", answer: "Paris" },
-    { question: "Which is the largest island in the world?", answer: "Greenland" },
-    { question: "Who is known as the Missile Man of India?", answer: "Dr. A.P.J. Abdul Kalam" },
-    { question: "Which is the brightest planet in the night sky?", answer: "Venus" },
-    { question: "What is the currency of the United Kingdom?", answer: "Pound Sterling" },
-    { question: "Which country has the largest number of time zones?", answer: "Russia" }
+    {
+        question: "What is the capital of India?",
+        options: ["A) Mumbai", "B) Kolkata", "C) New Delhi", "D) Chennai"],
+        answer: "C"
+    },
+    {
+        question: "Who is known as the Father of the Nation in India?",
+        options: ["A) Jawaharlal Nehru", "B) Mahatma Gandhi", "C) Subhas Chandra Bose", "D) Sardar Patel"],
+        answer: "B"
+    },
+    {
+        question: "Which planet is known as the Red Planet?",
+        options: ["A) Venus", "B) Jupiter", "C) Mars", "D) Saturn"],
+        answer: "C"
+    },
+    {
+        question: "What is the largest ocean on Earth?",
+        options: ["A) Indian Ocean", "B) Atlantic Ocean", "C) Arctic Ocean", "D) Pacific Ocean"],
+        answer: "D"
+    },
+    {
+        question: "Which gas do plants absorb from the atmosphere?",
+        options: ["A) Oxygen", "B) Nitrogen", "C) Carbon Dioxide", "D) Hydrogen"],
+        answer: "C"
+    },
+    {
+        question: "What is the chemical symbol for water?",
+        options: ["A) H2O", "B) CO2", "C) O2", "D) NaCl"],
+        answer: "A"
+    },
+    {
+        question: "Which country is known as the Land of the Rising Sun?",
+        options: ["A) China", "B) South Korea", "C) Japan", "D) Thailand"],
+        answer: "C"
+    },
+    {
+        question: "Who wrote the Indian National Anthem?",
+        options: ["A) Rabindranath Tagore", "B) Bankim Chandra Chatterjee", "C) Muhammad Iqbal", "D) Sarojini Naidu"],
+        answer: "A"
+    },
+    {
+        question: "How many continents are there in the world?",
+        options: ["A) 5", "B) 6", "C) 7", "D) 8"],
+        answer: "C"
+    },
+    {
+        question: "What is the longest river in the world?",
+        options: ["A) Amazon", "B) Nile", "C) Yangtze", "D) Mississippi"],
+        answer: "B"
+    }
 ];
 
 // Open YouTube
@@ -299,6 +298,63 @@ let quizActive = false;
 let quizQuestions = [];
 let quizIndex = 0;
 let quizScore = 0;
+let quizTimer;
+
+// Create audio elements
+const correctSound = new Audio("https://www.soundjay.com/buttons/sounds/button-09.mp3");
+const wrongSound = new Audio("https://www.soundjay.com/buttons/sounds/button-10.mp3");
+
+function playCorrectSound() {
+    correctSound.currentTime = 0;
+    correctSound.play().catch(() => { });
+}
+
+function playWrongSound() {
+    wrongSound.currentTime = 0;
+    wrongSound.play().catch(() => { });
+}
+
+// Clear quiz timer
+function clearQuizTimer() {
+    if (quizTimer) clearTimeout(quizTimer);
+}
+
+// Start quiz timer (10 seconds)
+function startQuizTimer() {
+    clearQuizTimer();
+    quizTimer = setTimeout(() => {
+        if (quizActive && quizIndex < quizQuestions.length) {
+            addMessage(`⏰ Time's up! Correct answer was: ${quizQuestions[quizIndex].answer}`, false);
+            playWrongSound();
+            quizIndex++;
+            if (quizIndex < quizQuestions.length) {
+                showNextQuestion();
+            } else {
+                endQuiz();
+            }
+        }
+    }, 10000);
+}
+
+// Show next question
+function showNextQuestion() {
+    const q = quizQuestions[quizIndex];
+    const optionsText = q.options.join("<br>");
+    const msg = `🎯 Q${quizIndex + 1}: ${q.question}<br><br>${optionsText}`;
+    setTimeout(() => {
+        addMessage(msg, false);
+        startQuizTimer();
+    }, 500);
+}
+
+// End quiz
+function endQuiz() {
+    quizActive = false;
+    clearQuizTimer();
+    const msg = `🎉 Quiz Completed!\nYou scored ${quizScore} out of ${quizQuestions.length}.`;
+    addMessage(msg, false);
+    safeSpeak(`Quiz completed! You scored ${quizScore} out of ${quizQuestions.length}.`);
+}
 
 // Core Logic
 function getResponse(message) {
@@ -334,35 +390,61 @@ function getResponse(message) {
         return;
     }
 
-    // === QUIZ SYSTEM ===
-    if (lower === "let's play quiz" || lower === "play quiz") {
+    // === QUIZ TRIGGERS ===
+    const quizTriggers = [
+        "let's play quiz",
+        "play quiz",
+        "start quiz",
+        "quiz time",
+        "let's play a game",
+        "i want to play quiz"
+    ];
+
+    if (quizTriggers.some(trigger => lower === trigger)) {
         quizActive = true;
         quizScore = 0;
         quizIndex = 0;
         quizQuestions = [...gkQuiz].sort(() => 0.5 - Math.random()).slice(0, 10);
-        return `🎯 Quiz Started! I'll ask 10 questions. Let's begin!\n\nQ1: ${quizQuestions[0].question}`;
+        addMessage("🎯 Quiz Started! 10 questions, 10 seconds each. Let's begin!", false);
+        showNextQuestion();
+        return;
     }
 
-    if (quizActive) {
-        const correctAnswer = quizQuestions[quizIndex].answer.toLowerCase().trim();
-        const userAnswer = message.toLowerCase().trim();
+    // Exit quiz
+    if (lower === "exit quiz" || lower === "stop quiz" || lower === "quit quiz") {
+        if (quizActive) {
+            quizActive = false;
+            clearQuizTimer();
+            return "👋 Quiz exited. You can start again anytime!";
+        } else {
+            return "No quiz is active right now.";
+        }
+    }
 
-        if (userAnswer === correctAnswer) {
+    // Handle quiz answer
+    if (quizActive) {
+        const ans = message.trim().toUpperCase();
+        const correct = quizQuestions[quizIndex].answer;
+
+        clearQuizTimer();
+
+        if (ans === correct) {
             quizScore++;
             addMessage("✅ Correct!", false);
+            playCorrectSound();
         } else {
-            addMessage(`❌ Wrong! Correct answer was: ${quizQuestions[quizIndex].answer}`, false);
+            addMessage(`❌ Wrong! Correct answer was: ${correct}`, false);
+            playWrongSound();
         }
 
         quizIndex++;
 
         if (quizIndex < quizQuestions.length) {
-            return `Q${quizIndex + 1}: ${quizQuestions[quizIndex].question}`;
+            showNextQuestion();
         } else {
-            const finalScore = `🎉 Quiz Completed!\nYou scored ${quizScore} out of ${quizQuestions.length}.`;
-            quizActive = false;
-            return finalScore;
+            endQuiz();
         }
+        return;
     }
 
     // Greetings
