@@ -208,6 +208,7 @@ let featureList = `
 ✅ <strong>Jokes & Fun:</strong> "Tell me a joke"<br>
 ✅ <strong>Reminders:</strong> "Remind me to drink water in 5 min"<br>
 ✅ <strong>Quiz:</strong> "Let's play quiz", "Start quiz", "Quiz time"<br>
+✅ <strong>Rock Paper Scissors:</strong> "Play rps", "RPS", "Let's play a game"<br>
 ✅ <strong>Stop:</strong> Say "Stop" to cancel anything<br><br>
 Just ask me anything! 😊
 `.trim();
@@ -356,6 +357,9 @@ function endQuiz() {
     safeSpeak(`Quiz completed! You scored ${quizScore} out of ${quizQuestions.length}.`);
 }
 
+// === ROCK PAPER SCISSORS GAME ===
+let rpsGameActive = false;
+
 // Core Logic
 function getResponse(message) {
     const lower = message.toLowerCase().trim();
@@ -384,7 +388,7 @@ function getResponse(message) {
     }
 
     // Help command
-    if (lower.includes("what can you do") || lower.includes("help") || lower.includes("features")) {
+    if (["what can you do", "help", "features", "what can you do"].some(cmd => lower.includes(cmd))) {
         addMessage(featureList, false);
         safeSpeak(featureVoiceMessage);
         return;
@@ -392,12 +396,7 @@ function getResponse(message) {
 
     // === QUIZ TRIGGERS ===
     const quizTriggers = [
-        "let's play quiz",
-        "play quiz",
-        "start quiz",
-        "quiz time",
-        "let's play a game",
-        "i want to play quiz"
+        "let's play quiz", "play quiz", "start quiz", "quiz time", "quiz", "i want to play quiz"
     ];
 
     if (quizTriggers.some(trigger => lower === trigger)) {
@@ -411,7 +410,7 @@ function getResponse(message) {
     }
 
     // Exit quiz
-    if (lower === "exit quiz" || lower === "stop quiz" || lower === "quit quiz") {
+    if (["exit quiz", "stop quiz", "quit quiz", "end quiz"].includes(lower)) {
         if (quizActive) {
             quizActive = false;
             clearQuizTimer();
@@ -447,8 +446,41 @@ function getResponse(message) {
         return;
     }
 
+    // === ROCK PAPER SCISSORS GAME ===
+    const rpsTriggers = ["rps", "rock paper scissors", "play rps", "lets play game", "game", "play game"];
+    if (rpsTriggers.some(trigger => lower === trigger)) {
+        rpsGameActive = true;
+        return "🎮 Let's play Rock-Paper-Scissors!<br>Choose: <strong>Rock</strong>, <strong>Paper</strong>, or <strong>Scissors</strong>.";
+    }
+
+    if (rpsGameActive) {
+        const userChoice = lower;
+        const choices = ["rock", "paper", "scissors"];
+        const botChoice = choices[Math.floor(Math.random() * 3)];
+
+        if (!choices.includes(userChoice)) {
+            return "❌ Invalid choice! Choose Rock, Paper, or Scissors.";
+        }
+
+        let result;
+        if (userChoice === botChoice) {
+            result = "It's a tie!";
+        } else if (
+            (userChoice === "rock" && botChoice === "scissors") ||
+            (userChoice === "paper" && botChoice === "rock") ||
+            (userChoice === "scissors" && botChoice === "paper")
+        ) {
+            result = "You win! 🎉";
+        } else {
+            result = "You lose! 😢";
+        }
+
+        rpsGameActive = false;
+        return `You: ${userChoice.toUpperCase()}<br>Ghost: ${botChoice.toUpperCase()}<br><br>👉 ${result}`;
+    }
+
     // Greetings
-    if (["hi", "hello", "hey", "hlo"].some(g => lower.includes(g))) {
+    if (["hi", "hello", "hey", "hlo", "namaste"].some(g => lower.includes(g))) {
         return "Hi there! I'm Ghost, How can I help you today?";
     }
 
@@ -477,59 +509,54 @@ function getResponse(message) {
     }
 
     // Math
-    const mathRegex = /^([+\-]?(?:\d+\.?\d*|\.\d+)(?:[+\-*/](?:\d+\.?\d*|\.\d+))*)$/;
-    if (mathRegex.test(message)) {
-        try {
-            let expr = message.replace(/x/g, '*');
-            if (/[^0-9+\-*/().\s]/.test(expr)) {
-                return "❌ Invalid characters in math expression.";
+    if (lower.includes("what is") || lower.includes("solve") || lower.includes("calculate")) {
+        const mathRegex = /^([+\-]?(?:\d+\.?\d*|\.\d+)(?:[+\-*/](?:\d+\.?\d*|\.\d+))*)$/;
+        if (mathRegex.test(message)) {
+            try {
+                let expr = message.replace(/x/g, '*');
+                if (/[^0-9+\-*/().\s]/.test(expr)) {
+                    return "❌ Invalid characters in math expression.";
+                }
+                const result = Function('"use strict"; return (' + expr + ')')();
+                if (isNaN(result) || !isFinite(result)) {
+                    return "❌ Cannot calculate this expression.";
+                }
+                return `🧮 Result: ${message} = ${result}`;
+            } catch (e) {
+                return "❌ I couldn't solve this math problem.";
             }
-            const result = Function('"use strict"; return (' + expr + ')')();
-            if (isNaN(result) || !isFinite(result)) {
-                return "❌ Cannot calculate this expression.";
-            }
-            return `🧮 Result: ${message} = ${result}`;
-        } catch (e) {
-            return "❌ I couldn't solve this math problem.";
         }
     }
 
     // === REMINDERS ===
-    const remindMatch1 = lower.match(/remind me to (.+?) in (\d+) (seconds?|minutes?|hours?)/);
-    const remindMatch2 = lower.match(/set a reminder for (\d+) (seconds?|minutes?|hours?)(?: to (.+?))?$/);
-    const cancelReminders = lower.includes("cancel all reminders");
+    if (lower.includes("remind me") || lower.includes("set reminder") || lower.includes("alert me in")) {
+        const remindMatch1 = lower.match(/remind me to (.+?) in (\d+) (seconds?|minutes?|hours?)/);
+        const remindMatch2 = lower.match(/set a reminder for (\d+) (seconds?|minutes?|hours?)(?: to (.+?))?$/);
 
-    if (cancelReminders) {
-        return cancelAllReminders();
-    }
+        if (remindMatch1 || remindMatch2) {
+            const [_, task, timeValue, unit, extraTask] = remindMatch1 || [...remindMatch2];
+            const finalTask = task || extraTask?.trim() || "this task";
+            const value = parseInt(timeValue);
+            let ms;
 
-    if (remindMatch1 || remindMatch2) {
-        const [_, task, timeValue, unit, extraTask] = remindMatch1 || [...remindMatch2];
-        const finalTask = task || extraTask?.trim() || "this task";
-        const value = parseInt(timeValue);
-        let ms;
+            if (unit.startsWith("sec")) ms = value * 1000;
+            else if (unit.startsWith("min")) ms = value * 60000;
+            else if (unit.startsWith("hour")) ms = value * 3600000;
 
-        if (unit.startsWith("sec")) ms = value * 1000;
-        else if (unit.startsWith("min")) ms = value * 60000;
-        else if (unit.startsWith("hour")) ms = value * 3600000;
+            const timerId = setTimeout(() => {
+                alert(`🔔 Reminder: ${finalTask}`);
+            }, ms);
 
-        const timerId = setTimeout(() => {
-            alert(`🔔 Reminder: ${finalTask}`);
-        }, ms);
+            activeReminders.push(timerId);
 
-        activeReminders.push(timerId);
-
-        const displayUnit = unit.startsWith("hour") ? "hour" : unit;
-        return `✅ I'll remind you to "${finalTask}" in ${value} ${displayUnit}${value !== 1 ? 's' : ''}.`;
+            const displayUnit = unit.startsWith("hour") ? "hour" : unit;
+            return `✅ I'll remind you to "${finalTask}" in ${value} ${displayUnit}${value !== 1 ? 's' : ''}.`;
+        }
     }
 
     // === TASK MANAGER (To-Do List) ===
-    const addTaskMatch = lower.startsWith("add:");
-    const showTasks = lower.includes("show tasks") || lower.includes("my tasks");
-    const removeTaskMatch = lower.match(/remove:\s*(\d+)/i);
-
-    if (addTaskMatch) {
-        const task = message.slice(4).trim();
+    if (lower.startsWith("add:") || lower.includes("add task")) {
+        const task = message.slice(message.indexOf(":") + 1).trim() || message.replace("add task", "").trim();
         if (!task) return "❌ Please provide a task to add.";
 
         const tasks = getTasks();
@@ -538,7 +565,7 @@ function getResponse(message) {
         return `✅ Task added: "${task}"`;
     }
 
-    if (showTasks) {
+    if (lower.includes("show tasks") || lower.includes("my tasks") || lower.includes("todo")) {
         const tasks = getTasks();
         if (tasks.length === 0) return "📋 No tasks yet. Use 'Add: Task name' to add one.";
 
@@ -565,21 +592,8 @@ function getResponse(message) {
         return table;
     }
 
-    if (removeTaskMatch) {
-        const index = parseInt(removeTaskMatch[1]) - 1;
-        const tasks = getTasks();
-
-        if (index < 0 || index >= tasks.length) {
-            return "❌ Invalid task number.";
-        }
-
-        const removed = tasks.splice(index, 1)[0];
-        saveTasks(tasks);
-        return `🗑️ Removed task: "${removed.text}"`;
-    }
-
     // Notes
-    if (lower.startsWith("note:") || lower.startsWith("save:")) {
+    if (lower.startsWith("note:") || lower.startsWith("save:") || lower.includes("save note")) {
         const note = message.slice(message.indexOf(":") + 1).trim();
         const notes = JSON.parse(localStorage.getItem("ghostNotes") || "[]");
         notes.push({ text: note, time: new Date().toLocaleString() });
@@ -594,15 +608,17 @@ function getResponse(message) {
     }
 
     // BMI
-    const weightMatch = lower.match(/weight.*?(\d+(\.\d+)?)/i);
-    const heightMatch = lower.match(/height.*?(\d+(\.\d+)?)/i);
-    if (weightMatch && heightMatch) {
-        const weight = parseFloat(weightMatch[1]);
-        let height = parseFloat(heightMatch[1]);
-        if (height > 3) height = height / 100;
-        const bmi = weight / (height * height);
-        const category = bmi < 18.5 ? "Underweight" : bmi < 25 ? "Normal" : bmi < 30 ? "Overweight" : "Obese";
-        return `🧮 Your BMI is ${bmi.toFixed(1)} (${category}).`;
+    if (lower.includes("weight") && lower.includes("height") || lower.includes("bmi")) {
+        const weightMatch = lower.match(/weight.*?(\d+(\.\d+)?)/i);
+        const heightMatch = lower.match(/height.*?(\d+(\.\d+)?)/i);
+        if (weightMatch && heightMatch) {
+            const weight = parseFloat(weightMatch[1]);
+            let height = parseFloat(heightMatch[1]);
+            if (height > 3) height = height / 100;
+            const bmi = weight / (height * height);
+            const category = bmi < 18.5 ? "Underweight" : bmi < 25 ? "Normal" : bmi < 30 ? "Overweight" : "Obese";
+            return `🧮 Your BMI is ${bmi.toFixed(1)} (${category}).`;
+        }
     }
 
     // YouTube Music

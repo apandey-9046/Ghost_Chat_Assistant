@@ -1,3 +1,4 @@
+/* Base Styles */
 * {
     margin: 0;
     padding: 0;
@@ -19,7 +20,6 @@ body {
     width: 100%;
     max-width: 900px;
     height: 90vh;
-    /* Increased for mobile full view */
     max-height: 800px;
     background-color: #1e1e1e;
     border-radius: 16px;
@@ -76,6 +76,7 @@ body {
     border: 2px solid #8a8aff;
 }
 
+/* Chat Area */
 .chat-area {
     flex: 1;
     padding: 16px;
@@ -84,8 +85,10 @@ body {
     flex-direction: column;
     gap: 12px;
     background: #121212;
+    scroll-behavior: smooth;
 }
 
+/* Messages */
 .message {
     max-width: 75%;
     padding: 14px 18px;
@@ -113,7 +116,6 @@ body {
     background: linear-gradient(135deg, #8a8aff 0%, #6c63ff 100%);
     color: white;
     border-bottom-right-radius: 6px;
-    max-width: 70% !important;
 }
 
 .ghost-message {
@@ -152,6 +154,7 @@ body {
     text-align: right;
 }
 
+/* Input Area Sticky */
 .input-area {
     padding: 16px;
     background-color: #1e1e1e;
@@ -159,6 +162,9 @@ body {
     display: flex;
     gap: 12px;
     align-items: center;
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
 }
 
 .input-area input {
@@ -178,15 +184,21 @@ body {
     font-size: 15px;
 }
 
+/* Buttons */
+#micButton,
+#voiceButton,
+#sendButton {
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
 #micButton {
     padding: 14px 16px;
     background: #ff6b6b;
     color: white;
-    border: none;
-    border-radius: 12px;
-    cursor: pointer;
     font-size: 18px;
-    transition: all 0.3s ease;
     box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
 }
 
@@ -196,16 +208,11 @@ body {
     transform: translateY(-2px);
 }
 
-/* Voice Toggle Button */
 #voiceButton {
     padding: 16px 18px;
     background: #6c5ce7;
     color: white;
-    border: none;
-    border-radius: 12px;
-    cursor: pointer;
     font-size: 18px;
-    transition: all 0.3s ease;
     box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3);
 }
 
@@ -222,12 +229,8 @@ body {
     padding: 14px 20px;
     background: linear-gradient(135deg, #8a8aff 0%, #6c63ff 100%);
     color: white;
-    border: none;
-    border-radius: 12px;
-    cursor: pointer;
     font-weight: 600;
     font-size: 15px;
-    transition: all 0.3s ease;
     box-shadow: 0 4px 15px rgba(138, 138, 255, 0.3);
 }
 
@@ -240,6 +243,7 @@ body {
     transform: translateY(0);
 }
 
+/* Typing Indicator */
 .typing-indicator {
     display: none;
     align-self: flex-start;
@@ -288,7 +292,7 @@ body {
     }
 }
 
-/* Scrollbar styling */
+/* Scrollbar */
 .chat-area::-webkit-scrollbar {
     width: 6px;
 }
@@ -306,12 +310,11 @@ body {
     background: #4a4a4a;
 }
 
-/* Responsive adjustments */
+/* Responsive */
 @media (max-width: 768px) {
     .container {
         height: 95vh;
         border-radius: 12px;
-        margin: 0;
     }
 
     .header {
@@ -345,14 +348,6 @@ body {
         max-width: 75% !important;
     }
 
-    .message-content {
-        font-size: 15px;
-    }
-
-    .message-time {
-        font-size: 11px;
-    }
-
     .input-area {
         padding: 14px;
         gap: 10px;
@@ -364,6 +359,7 @@ body {
     }
 
     #micButton,
+    #voiceButton,
     #sendButton {
         padding: 12px 16px;
         font-size: 16px;
@@ -378,7 +374,6 @@ body {
     .container {
         height: 98vh;
         border-radius: 10px;
-        overflow: hidden;
     }
 
     .header {
@@ -438,6 +433,7 @@ body {
     }
 
     #micButton,
+    #voiceButton,
     #sendButton {
         padding: 10px 14px;
         font-size: 14px;
