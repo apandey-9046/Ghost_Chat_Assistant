@@ -227,7 +227,7 @@ if (SpeechRecognition) {
     micButton.style.display = "none";
 }
 
-// Feature List
+// Feature List with new features
 let featureList = `
 ✨ <strong>Here's what I can do:</strong><br><br>
 ✅ <strong>Math Help:</strong> "What is 25 × 17?"<br>
@@ -246,6 +246,16 @@ let featureList = `
 ✅ <strong>Reminders:</strong> "Remind me to drink water in 5 min"<br>
 ✅ <strong>Quiz:</strong> "Let's play quiz", "Start quiz", "Quiz time"<br>
 ✅ <strong>Rock Paper Scissors:</strong> "Play rps", "RPS", "Let's play a game"<br>
+✅ <strong>Habit Tracker:</strong> "Track habit: Meditation", "Show habits"<br>
+✅ <strong>Expense Manager:</strong> "Add expense: 50 for food", "Show expenses"<br>
+✅ <strong>Study Timer:</strong> "Start pomodoro", "25 min study timer"<br>
+✅ <strong>Mood Journal:</strong> "Log mood: Happy", "Show mood history"<br>
+✅ <strong>Goal Tracker:</strong> "Set goal: Learn JavaScript", "Show goals"<br>
+✅ <strong>Contact Manager:</strong> "Add contact: John 1234567890", "Show contacts"<br>
+✅ <strong>Password Generator:</strong> "Generate password"<br>
+✅ <strong>Daily Planner:</strong> "Plan day: Study 2 hours", "Show daily plan"<br>
+✅ <strong>Health Tracker:</strong> "Log water: 500ml", "Show health log"<br>
+✅ <strong>Flashcard System:</strong> "Add flashcard: Capital of India - New Delhi"<br>
 ✅ <strong>Stop:</strong> Say "Stop" to cancel anything<br><br>
 Just ask me anything! 😊
 `.trim();
@@ -340,8 +350,8 @@ let quizScore = 0;
 let quizTimer;
 
 // Create audio elements for quiz sounds
-const correctSound = new Audio(" https://www.soundjay.com/buttons/sounds/button-09.mp3 ");
-const wrongSound = new Audio("https://www.soundjay.com/buttons/sounds/button-10.mp3 ");
+const correctSound = new Audio("https://www.soundjay.com/buttons/sounds/button-09.mp3");
+const wrongSound = new Audio("https://www.soundjay.com/buttons/sounds/button-10.mp3");
 
 function playCorrectSound() {
     try {
@@ -405,6 +415,469 @@ function endQuiz() {
 
 // === ROCK PAPER SCISSORS GAME - FIXED ===
 let rpsGameActive = false;
+
+// === NEW FEATURES FUNCTIONS ===
+
+// === HABIT TRACKER ===
+function getHabits() {
+    return JSON.parse(localStorage.getItem("ghostHabits") || "[]");
+}
+
+function saveHabits(habits) {
+    localStorage.setItem("ghostHabits", JSON.stringify(habits));
+}
+
+function trackHabit(habitName) {
+    const habits = getHabits();
+    const today = new Date().toDateString();
+    const existingHabit = habits.find(h => h.name.toLowerCase() === habitName.toLowerCase());
+
+    if (existingHabit) {
+        if (!existingHabit.dates.includes(today)) {
+            existingHabit.dates.push(today);
+            existingHabit.streak += 1;
+        }
+    } else {
+        habits.push({
+            name: habitName,
+            dates: [today],
+            streak: 1,
+            createdAt: new Date().toLocaleString()
+        });
+    }
+
+    saveHabits(habits);
+    return `✅ Habit "${habitName}" tracked for today!`;
+}
+
+function showHabits() {
+    const habits = getHabits();
+    if (habits.length === 0) {
+        return "📋 No habits tracked yet. Use 'Track habit: Meditation' to start!";
+    }
+
+    let table = `
+        <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
+            <tr style="background: #2d2d2d; color: white;">
+                <th style="text-align: left;">Habit</th>
+                <th style="text-align: left;">Streak</th>
+                <th style="text-align: left;">Last Done</th>
+            </tr>
+    `;
+
+    habits.forEach(habit => {
+        const lastDone = habit.dates.length > 0 ?
+            new Date(habit.dates[habit.dates.length - 1]).toLocaleDateString() :
+            "Never";
+        table += `
+            <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
+                <td>${habit.name}</td>
+                <td>${habit.streak} days</td>
+                <td>${lastDone}</td>
+            </tr>
+        `;
+    });
+
+    table += `</table>`;
+    return table;
+}
+
+// === EXPENSE MANAGER ===
+function getExpenses() {
+    return JSON.parse(localStorage.getItem("ghostExpenses") || "[]");
+}
+
+function saveExpenses(expenses) {
+    localStorage.setItem("ghostExpenses", JSON.stringify(expenses));
+}
+
+function addExpense(amount, description) {
+    const expenses = getExpenses();
+    const expense = {
+        amount: parseFloat(amount),
+        description: description,
+        date: new Date().toLocaleString()
+    };
+    expenses.push(expense);
+    saveExpenses(expenses);
+
+    // Calculate total
+    const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+    return `✅ Expense added: ₹${amount} for ${description}<br>📊 Total spent: ₹${total.toFixed(2)}`;
+}
+
+function showExpenses() {
+    const expenses = getExpenses();
+    if (expenses.length === 0) {
+        return "💰 No expenses recorded yet. Use 'Add expense: 50 for food' to start!";
+    }
+
+    let table = `
+        <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
+            <tr style="background: #2d2d2d; color: white;">
+                <th style="text-align: left;">Amount</th>
+                <th style="text-align: left;">Description</th>
+                <th style="text-align: left;">Date</th>
+            </tr>
+    `;
+
+    let total = 0;
+    expenses.forEach(expense => {
+        total += expense.amount;
+        table += `
+            <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
+                <td>₹${expense.amount.toFixed(2)}</td>
+                <td>${expense.description}</td>
+                <td>${expense.date}</td>
+            </tr>
+        `;
+    });
+
+    table += `
+        <tr style="background: #2d2d2d; color: white; font-weight: bold;">
+            <td colspan="2">Total:</td>
+            <td>₹${total.toFixed(2)}</td>
+        </tr>
+    `;
+    table += `</table>`;
+    return table;
+}
+
+// === STUDY TIMER (POMODORO) ===
+let pomodoroTimer = null;
+let pomodoroTimeLeft = 0;
+
+function startPomodoro(minutes = 25) {
+    if (pomodoroTimer) {
+        clearTimeout(pomodoroTimer);
+    }
+
+    pomodoroTimeLeft = minutes * 60; // Convert to seconds
+    const endTime = new Date(Date.now() + pomodoroTimeLeft * 1000);
+
+    function updateTimer() {
+        if (pomodoroTimeLeft <= 0) {
+            addMessage("⏰ Pomodoro session completed! Time for a break!", false);
+            if (Notification.permission === "granted") {
+                new Notification("Ghost - Pomodoro", { body: "Pomodoro session completed! Time for a break!" });
+            }
+            pomodoroTimer = null;
+            return;
+        }
+
+        pomodoroTimeLeft--;
+        setTimeout(updateTimer, 1000);
+    }
+
+    pomodoroTimer = setTimeout(updateTimer, 1000);
+    return `⏱️ Pomodoro timer started for ${minutes} minutes!`;
+}
+
+// === MOOD JOURNAL ===
+function getMoods() {
+    return JSON.parse(localStorage.getItem("ghostMoods") || "[]");
+}
+
+function saveMoods(moods) {
+    localStorage.setItem("ghostMoods", JSON.stringify(moods));
+}
+
+function logMood(mood) {
+    const moods = getMoods();
+    const moodEntry = {
+        mood: mood,
+        date: new Date().toLocaleString(),
+        timestamp: Date.now()
+    };
+    moods.push(moodEntry);
+    saveMoods(moods);
+    return `😊 Mood "${mood}" logged successfully!`;
+}
+
+function showMoodHistory() {
+    const moods = getMoods();
+    if (moods.length === 0) {
+        return "🎭 No moods logged yet. Use 'Log mood: Happy' to start!";
+    }
+
+    // Sort by date (newest first)
+    moods.sort((a, b) => b.timestamp - a.timestamp);
+
+    let table = `
+        <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
+            <tr style="background: #2d2d2d; color: white;">
+                <th style="text-align: left;">Mood</th>
+                <th style="text-align: left;">Date</th>
+            </tr>
+    `;
+
+    moods.forEach(mood => {
+        table += `
+            <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
+                <td>${mood.mood}</td>
+                <td>${mood.date}</td>
+            </tr>
+        `;
+    });
+
+    table += `</table>`;
+    return table;
+}
+
+// === GOAL TRACKER ===
+function getGoals() {
+    return JSON.parse(localStorage.getItem("ghostGoals") || "[]");
+}
+
+function saveGoals(goals) {
+    localStorage.setItem("ghostGoals", JSON.stringify(goals));
+}
+
+function setGoal(goalText) {
+    const goals = getGoals();
+    const goal = {
+        id: Date.now(),
+        text: goalText,
+        status: "pending",
+        createdAt: new Date().toLocaleString()
+    };
+    goals.push(goal);
+    saveGoals(goals);
+    return `🎯 Goal set: "${goalText}"`;
+}
+
+function showGoals() {
+    const goals = getGoals();
+    if (goals.length === 0) {
+        return "🎯 No goals set yet. Use 'Set goal: Learn JavaScript' to start!";
+    }
+
+    let table = `
+        <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
+            <tr style="background: #2d2d2d; color: white;">
+                <th style="text-align: left;">Goal</th>
+                <th style="text-align: left;">Status</th>
+                <th style="text-align: left;">Created</th>
+            </tr>
+    `;
+
+    goals.forEach(goal => {
+        const status = goal.status === "completed" ? "✅ Completed" : "⏳ Pending";
+        table += `
+            <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
+                <td>${goal.text}</td>
+                <td>${status}</td>
+                <td>${goal.createdAt}</td>
+            </tr>
+        `;
+    });
+
+    table += `</table>`;
+    return table;
+}
+
+// === CONTACT MANAGER ===
+function getContacts() {
+    return JSON.parse(localStorage.getItem("ghostContacts") || "[]");
+}
+
+function saveContacts(contacts) {
+    localStorage.setItem("ghostContacts", JSON.stringify(contacts));
+}
+
+function addContact(name, phone) {
+    const contacts = getContacts();
+    const contact = {
+        name: name,
+        phone: phone,
+        createdAt: new Date().toLocaleString()
+    };
+    contacts.push(contact);
+    saveContacts(contacts);
+    return `📞 Contact added: ${name} - ${phone}`;
+}
+
+function showContacts() {
+    const contacts = getContacts();
+    if (contacts.length === 0) {
+        return "📞 No contacts saved yet. Use 'Add contact: John 1234567890' to start!";
+    }
+
+    let table = `
+        <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
+            <tr style="background: #2d2d2d; color: white;">
+                <th style="text-align: left;">Name</th>
+                <th style="text-align: left;">Phone</th>
+                <th style="text-align: left;">Added</th>
+            </tr>
+    `;
+
+    contacts.forEach(contact => {
+        table += `
+            <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
+                <td>${contact.name}</td>
+                <td>${contact.phone}</td>
+                <td>${contact.createdAt}</td>
+            </tr>
+        `;
+    });
+
+    table += `</table>`;
+    return table;
+}
+
+// === PASSWORD GENERATOR ===
+function generatePassword(length = 12) {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?";
+    let password = "";
+    for (let i = 0; i < length; i++) {
+        password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `🔑 Generated password: <strong>${password}</strong><br>📋 Copy and save it securely!`;
+}
+
+// === DAILY PLANNER ===
+function getDailyPlan() {
+    return JSON.parse(localStorage.getItem("ghostDailyPlan") || "[]");
+}
+
+function saveDailyPlan(plan) {
+    localStorage.setItem("ghostDailyPlan", JSON.stringify(plan));
+}
+
+function addPlanItem(item) {
+    const plan = getDailyPlan();
+    const planItem = {
+        text: item,
+        completed: false,
+        createdAt: new Date().toLocaleString()
+    };
+    plan.push(planItem);
+    saveDailyPlan(plan);
+    return `📅 Plan item added: "${item}"`;
+}
+
+function showDailyPlan() {
+    const plan = getDailyPlan();
+    if (plan.length === 0) {
+        return "📅 No daily plan yet. Use 'Plan day: Study 2 hours' to start!";
+    }
+
+    let table = `
+        <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
+            <tr style="background: #2d2d2d; color: white;">
+                <th style="text-align: left;">Task</th>
+                <th style="text-align: left;">Status</th>
+                <th style="text-align: left;">Added</th>
+            </tr>
+    `;
+
+    plan.forEach(item => {
+        const status = item.completed ? "✅ Done" : "⏳ Pending";
+        table += `
+            <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
+                <td>${item.text}</td>
+                <td>${status}</td>
+                <td>${item.createdAt}</td>
+            </tr>
+        `;
+    });
+
+    table += `</table>`;
+    return table;
+}
+
+// === HEALTH TRACKER ===
+function getHealthLogs() {
+    return JSON.parse(localStorage.getItem("ghostHealthLogs") || "[]");
+}
+
+function saveHealthLogs(logs) {
+    localStorage.setItem("ghostHealthLogs", JSON.stringify(logs));
+}
+
+function logHealth(activity, amount) {
+    const logs = getHealthLogs();
+    const log = {
+        activity: activity,
+        amount: amount,
+        date: new Date().toLocaleString()
+    };
+    logs.push(log);
+    saveHealthLogs(logs);
+    return `💪 Health log added: ${activity} - ${amount}`;
+}
+
+function showHealthLogs() {
+    const logs = getHealthLogs();
+    if (logs.length === 0) {
+        return "💪 No health logs yet. Use 'Log water: 500ml' to start!";
+    }
+
+    let table = `
+        <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
+            <tr style="background: #2d2d2d; color: white;">
+                <th style="text-align: left;">Activity</th>
+                <th style="text-align: left;">Amount</th>
+                <th style="text-align: left;">Date</th>
+            </tr>
+    `;
+
+    logs.forEach(log => {
+        table += `
+            <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
+                <td>${log.activity}</td>
+                <td>${log.amount}</td>
+                <td>${log.date}</td>
+            </tr>
+        `;
+    });
+
+    table += `</table>`;
+    return table;
+}
+
+// === FLASHCARD SYSTEM ===
+function getFlashcards() {
+    return JSON.parse(localStorage.getItem("ghostFlashcards") || "[]");
+}
+
+function saveFlashcards(flashcards) {
+    localStorage.setItem("ghostFlashcards", JSON.stringify(flashcards));
+}
+
+function addFlashcard(question, answer) {
+    const flashcards = getFlashcards();
+    const flashcard = {
+        question: question,
+        answer: answer,
+        createdAt: new Date().toLocaleString()
+    };
+    flashcards.push(flashcard);
+    saveFlashcards(flashcards);
+    return `📚 Flashcard added!<br>❓ ${question}<br>✅ ${answer}`;
+}
+
+function showFlashcards() {
+    const flashcards = getFlashcards();
+    if (flashcards.length === 0) {
+        return "📚 No flashcards yet. Use 'Add flashcard: Capital of India - New Delhi' to start!";
+    }
+
+    let cards = "📚 Your Flashcards:<br><br>";
+    flashcards.forEach((card, index) => {
+        cards += `
+            <div style="background: #2d2d2d; padding: 10px; margin: 10px 0; border-radius: 5px;">
+                <strong>Card ${index + 1}:</strong><br>
+                ❓ <strong>Q:</strong> ${card.question}<br>
+                ✅ <strong>A:</strong> ${card.answer}<br>
+                <small>Added: ${card.createdAt}</small>
+            </div>
+        `;
+    });
+
+    return cards;
+}
 
 // === DAILY LIFE CONVERSATIONS ===
 const dailyConversations = {
@@ -477,6 +950,138 @@ function getResponse(message) {
         addMessage(featureList, false);
         safeSpeak(featureVoiceMessage);
         return;
+    }
+
+    // === NEW FEATURES TRIGGERS ===
+
+    // HABIT TRACKER
+    if (lower.includes("track habit") || lower.includes("log habit")) {
+        const habitMatch = message.match(/(?:track|log) habit:?\s*(.+)/i);
+        if (habitMatch && habitMatch[1]) {
+            return trackHabit(habitMatch[1].trim());
+        } else {
+            return "❌ Please specify habit name. Example: 'Track habit: Meditation'";
+        }
+    }
+
+    if (lower.includes("show habits") || lower.includes("view habits") || lower.includes("my habits")) {
+        return showHabits();
+    }
+
+    // EXPENSE MANAGER
+    if (lower.includes("add expense") || lower.includes("log expense")) {
+        const expenseMatch = message.match(/(?:add|log) expense:?\s*(\d+(?:\.\d+)?)\s*(?:for|on)?\s*(.+)/i);
+        if (expenseMatch && expenseMatch[1] && expenseMatch[2]) {
+            return addExpense(expenseMatch[1], expenseMatch[2]);
+        } else {
+            return "❌ Please specify amount and description. Example: 'Add expense: 50 for food'";
+        }
+    }
+
+    if (lower.includes("show expenses") || lower.includes("view expenses") || lower.includes("my expenses")) {
+        return showExpenses();
+    }
+
+    // STUDY TIMER (POMODORO)
+    if (lower.includes("start pomodoro") || lower.includes("pomodoro timer")) {
+        const timeMatch = message.match(/(\d+)\s*(?:min|minute|minutes)/i);
+        const minutes = timeMatch ? parseInt(timeMatch[1]) : 25;
+        return startPomodoro(minutes);
+    }
+
+    if (lower.includes("study timer") || lower.includes("focus timer")) {
+        const timeMatch = message.match(/(\d+)\s*(?:min|minute|minutes)/i);
+        const minutes = timeMatch ? parseInt(timeMatch[1]) : 25;
+        return startPomodoro(minutes);
+    }
+
+    // MOOD JOURNAL
+    if (lower.includes("log mood") || lower.includes("track mood")) {
+        const moodMatch = message.match(/(?:log|track) mood:?\s*(.+)/i);
+        if (moodMatch && moodMatch[1]) {
+            return logMood(moodMatch[1].trim());
+        } else {
+            return "❌ Please specify your mood. Example: 'Log mood: Happy'";
+        }
+    }
+
+    if (lower.includes("show mood") || lower.includes("view mood") || lower.includes("mood history")) {
+        return showMoodHistory();
+    }
+
+    // GOAL TRACKER
+    if (lower.includes("set goal") || lower.includes("add goal")) {
+        const goalMatch = message.match(/(?:set|add) goal:?\s*(.+)/i);
+        if (goalMatch && goalMatch[1]) {
+            return setGoal(goalMatch[1].trim());
+        } else {
+            return "❌ Please specify your goal. Example: 'Set goal: Learn JavaScript'";
+        }
+    }
+
+    if (lower.includes("show goals") || lower.includes("view goals") || lower.includes("my goals")) {
+        return showGoals();
+    }
+
+    // CONTACT MANAGER
+    if (lower.includes("add contact")) {
+        const contactMatch = message.match(/add contact:?\s*(.+?)\s+(\d+)/i);
+        if (contactMatch && contactMatch[1] && contactMatch[2]) {
+            return addContact(contactMatch[1], contactMatch[2]);
+        } else {
+            return "❌ Please specify name and phone. Example: 'Add contact: John 1234567890'";
+        }
+    }
+
+    if (lower.includes("show contacts") || lower.includes("view contacts") || lower.includes("my contacts")) {
+        return showContacts();
+    }
+
+    // PASSWORD GENERATOR
+    if (lower.includes("generate password") || lower.includes("create password")) {
+        return generatePassword();
+    }
+
+    // DAILY PLANNER
+    if (lower.includes("plan day") || lower.includes("add plan")) {
+        const planMatch = message.match(/(?:plan day|add plan):?\s*(.+)/i);
+        if (planMatch && planMatch[1]) {
+            return addPlanItem(planMatch[1].trim());
+        } else {
+            return "❌ Please specify plan item. Example: 'Plan day: Study 2 hours'";
+        }
+    }
+
+    if (lower.includes("show plan") || lower.includes("view plan") || lower.includes("daily plan")) {
+        return showDailyPlan();
+    }
+
+    // HEALTH TRACKER
+    if (lower.includes("log water") || lower.includes("log health")) {
+        const healthMatch = message.match(/(?:log water|log health):?\s*(.+)/i);
+        if (healthMatch && healthMatch[1]) {
+            return logHealth("Water", healthMatch[1].trim());
+        } else {
+            return "❌ Please specify amount. Example: 'Log water: 500ml'";
+        }
+    }
+
+    if (lower.includes("show health") || lower.includes("view health") || lower.includes("health log")) {
+        return showHealthLogs();
+    }
+
+    // FLASHCARD SYSTEM
+    if (lower.includes("add flashcard")) {
+        const flashcardMatch = message.match(/add flashcard:?\s*(.+?)\s*[-–—]\s*(.+)/i);
+        if (flashcardMatch && flashcardMatch[1] && flashcardMatch[2]) {
+            return addFlashcard(flashcardMatch[1].trim(), flashcardMatch[2].trim());
+        } else {
+            return "❌ Please specify question and answer. Example: 'Add flashcard: Capital of India - New Delhi'";
+        }
+    }
+
+    if (lower.includes("show flashcards") || lower.includes("view flashcards") || lower.includes("my flashcards")) {
+        return showFlashcards();
     }
 
     // === QUIZ TRIGGERS ===
