@@ -340,13 +340,13 @@ let quizScore = 0;
 let quizTimer;
 
 // Create audio elements for quiz sounds
-const correctSound = new Audio("https://www.soundjay.com/buttons/sounds/button-09.mp3");
-const wrongSound = new Audio("https://www.soundjay.com/buttons/sounds/button-10.mp3");
+const correctSound = new Audio(" https://www.soundjay.com/buttons/sounds/button-09.mp3 ");
+const wrongSound = new Audio("https://www.soundjay.com/buttons/sounds/button-10.mp3 ");
 
 function playCorrectSound() {
     try {
         correctSound.currentTime = 0;
-        correctSound.play().catch(() => {});
+        correctSound.play().catch(() => { });
     } catch (e) {
         console.log("Sound play failed");
     }
@@ -355,7 +355,7 @@ function playCorrectSound() {
 function playWrongSound() {
     try {
         wrongSound.currentTime = 0;
-        wrongSound.play().catch(() => {});
+        wrongSound.play().catch(() => { });
     } catch (e) {
         console.log("Sound play failed");
     }
@@ -866,3 +866,12 @@ document.addEventListener("click", () => {
 
 // Hide typing indicator on load
 hideTyping();
+
+// ✅ MOBILE FIX: Adjust height on load and resize
+(function () {
+    function setAppHeight() {
+        document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+    }
+    setAppHeight();
+    window.addEventListener('resize', setAppHeight);
+})();

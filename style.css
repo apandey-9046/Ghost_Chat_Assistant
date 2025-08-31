@@ -6,6 +6,13 @@
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+:root {
+    --app-height: 100vh;
+}
+
+.app-container {
+    height: var(--app-height);
+}
 body {
     background: #000;
     color: #fff;
@@ -18,18 +25,19 @@ body {
     overflow: hidden;
 }
 
-/* App Container - Desktop Box */
+/* App Container - Responsive & Safe Area Support */
 .app-container {
     width: 100%;
-    height: 100vh;
+    height: var(--app-height);
     background: #000;
     display: flex;
     flex-direction: column;
     position: relative;
     overflow: hidden;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Desktop - Centered Box with more width */
+/* Desktop View */
 @media (min-width: 768px) {
     body {
         background: linear-gradient(135deg, #000, #111);
@@ -94,19 +102,13 @@ body {
     box-shadow: 0 0 6px rgba(0, 168, 132, 0.5);
 }
 
-/* Right side - Ghost avatar (circle logo) - UPDATED */
 .header-right .avatar {
     width: 55px;
-    /* Increased size */
     height: 55px;
-    /* Increased size */
     border-radius: 50%;
-    /* Keep circular */
     object-fit: cover;
     border: 2px solid #10e030;
-    /* Changed border color */
     box-shadow: 0 0 10px rgba(16, 224, 48, 0.3);
-    /* Updated shadow */
 }
 
 /* Chat Area */
@@ -118,7 +120,6 @@ body {
     flex-direction: column;
     gap: 14px;
     background: #000306;
-    /* Darker background */
     scroll-behavior: smooth;
     background-image:
         radial-gradient(circle at 10% 20%, rgba(0, 168, 132, 0.03) 0%, transparent 20%),
@@ -138,7 +139,6 @@ body {
     margin-bottom: 4px;
     opacity: 0.9;
     color: #5187a9;
-    /* Changed color */
 }
 
 .message-bubble {
@@ -157,33 +157,29 @@ body {
     color: #667781;
 }
 
-/* User Messages (Right - Green) - UPDATED COLORS */
+/* User Messages (Right) */
 .user-message {
     align-self: flex-end;
 }
 
 .user-message .message-bubble {
     background: #667371;
-    /* Changed background */
     color: #f4f5f6;
-    /* Changed text color */
     border-top-right-radius: 0;
     border: 1px solid #2dbea1;
-    /* Changed border */
 }
 
 .user-message .message-time {
     text-align: right;
 }
 
-/* Ghost Messages (Left - Dark Gray) - UPDATED COLORS */
+/* Ghost Messages (Left) */
 .ghost-message {
     align-self: flex-start;
 }
 
 .ghost-message .message-bubble {
     background: #052436;
-    /* Changed background */
     color: #e9edef;
     border-top-left-radius: 0;
     border: 1px solid #2a3942;
@@ -241,6 +237,9 @@ body {
     box-shadow: 0 -1px 0 rgba(0, 0, 0, 0.3);
     flex-shrink: 0;
     border-top: 1px solid #2a3942;
+    position: relative;
+    z-index: 5;
+    padding-bottom: max(env(safe-area-inset-bottom, 12px), 12px);
 }
 
 .input-field {
@@ -258,7 +257,6 @@ body {
 }
 
 .input-field:focus {
-    outline: none;
     border-color: #00a884;
     box-shadow: 0 0 0 2px rgba(0, 168, 132, 0.2);
     background: #32424a;
@@ -305,7 +303,6 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: 500;
     box-shadow: 0 2px 4px rgba(0, 168, 132, 0.2);
     flex-shrink: 0;
 }
@@ -316,7 +313,7 @@ body {
     box-shadow: 0 4px 8px rgba(0, 168, 132, 0.3);
 }
 
-/* Mobile Fix - Ensure Send Button Visible */
+/* Mobile Responsive */
 @media (max-width: 480px) {
     .input-container {
         padding: 10px 12px;
@@ -326,7 +323,6 @@ body {
     .input-field {
         padding: 12px 14px;
         font-size: 0.95rem;
-        min-width: 0;
     }
 
     .action-button {
@@ -341,22 +337,11 @@ body {
         min-width: 60px;
     }
 
-    .message {
-        max-width: 85%;
-    }
-
-    .app-header {
-        padding: 12px 14px;
-    }
-
     .header-right .avatar {
         width: 45px;
-        /* Adjusted for mobile */
         height: 45px;
-        /* Adjusted for mobile */
     }
 
-    /* Very small screens */
     @media (max-width: 360px) {
         .input-container {
             padding: 8px 10px;
@@ -382,7 +367,6 @@ body {
 
         .header-right .avatar {
             width: 40px;
-            /* Further adjusted */
             height: 40px;
         }
     }
@@ -403,7 +387,7 @@ body {
     }
 }
 
-/* Scrollbar styling */
+/* Scrollbar */
 .chat-container::-webkit-scrollbar {
     width: 6px;
 }
