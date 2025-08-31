@@ -191,13 +191,13 @@ if (SpeechRecognition) {
 }
 
 // Feature List
-const featureList = `
+let featureList = `
 ✨ <strong>Here's what I can do:</strong><br><br>
 ✅ <strong>Math Help:</strong> "What is 25 × 17?"<br>
 ✅ <strong>Time & Date:</strong> "What time is it?"<br>
 ✅ <strong>Notes:</strong> "Note: Buy milk"<br>
 ✅ <strong>Timer:</strong> "Set timer for 5 minutes"<br>
-✅ <strong>To-Do List:</strong> "Add: Call mom", "Show tasks"<br>
+✅ <strong>To-Do List:</strong> "Add: Call mom", "Show tasks", "Remove: 1"<br>
 ✅ <strong>BMI Calculator:</strong> "My weight 60kg, height 160cm"<br>
 ✅ <strong>Unit Converter:</strong> "5 km in miles", "10 kg to pounds"<br>
 ✅ <strong>Currency:</strong> "10 USD in INR"<br>
@@ -206,18 +206,99 @@ const featureList = `
 ✅ <strong>Meditation:</strong> "Start 5-minute meditation"<br>
 ✅ <strong>Flashcards:</strong> "Teach me 5 Spanish words"<br>
 ✅ <strong>Jokes & Fun:</strong> "Tell me a joke"<br>
-✅ <strong>Reminders:</strong> "Remind me to drink water"<br>
+✅ <strong>Reminders:</strong> "Remind me to drink water in 5 min"<br>
+✅ <strong>Quiz:</strong> "Let's play quiz"<br>
 ✅ <strong>Stop:</strong> Say "Stop" to cancel anything<br><br>
 Just ask me anything! 😊
 `.trim();
 
 const featureVoiceMessage = "Here are the things I can help you with!";
 
+// === GENERAL KNOWLEDGE QUIZ QUESTIONS & ANSWERS ===
+const gkQuiz = [
+    { question: "What is the capital of India?", answer: "New Delhi" },
+    { question: "Who is known as the Father of the Nation in India?", answer: "Mahatma Gandhi" },
+    { question: "Which planet is known as the Red Planet?", answer: "Mars" },
+    { question: "What is the largest ocean on Earth?", answer: "Pacific Ocean" },
+    { question: "Which gas do plants absorb from the atmosphere?", answer: "Carbon Dioxide" },
+    { question: "What is the chemical symbol for water?", answer: "H2O" },
+    { question: "Which country is known as the Land of the Rising Sun?", answer: "Japan" },
+    { question: "Who wrote the Indian National Anthem?", answer: "Rabindranath Tagore" },
+    { question: "How many continents are there in the world?", answer: "7" },
+    { question: "What is the longest river in the world?", answer: "Nile River" },
+    { question: "Which animal is known as the 'Ship of the Desert'?", answer: "Camel" },
+    { question: "What is the tallest mountain in the world?", answer: "Mount Everest" },
+    { question: "Which planet is closest to the Sun?", answer: "Mercury" },
+    { question: "What is the smallest country in the world?", answer: "Vatican City" },
+    { question: "Which organ pumps blood in the human body?", answer: "Heart" },
+    { question: "Which language is spoken in Brazil?", answer: "Portuguese" },
+    { question: "What is the currency of Japan?", answer: "Yen" },
+    { question: "Which planet has rings around it?", answer: "Saturn" },
+    { question: "Who invented the telephone?", answer: "Alexander Graham Bell" },
+    { question: "What is the largest desert in the world?", answer: "Sahara Desert" },
+    { question: "Which country hosted the 2020 Summer Olympics?", answer: "Japan" },
+    { question: "What is the capital of Australia?", answer: "Canberra" },
+    { question: "Which gas is most abundant in Earth's atmosphere?", answer: "Nitrogen" },
+    { question: "Who painted the Mona Lisa?", answer: "Leonardo da Vinci" },
+    { question: "What is the largest mammal in the world?", answer: "Blue Whale" },
+    { question: "Which country is the largest by area?", answer: "Russia" },
+    { question: "In which year did India gain independence?", answer: "1947" },
+    { question: "What is the full form of WWW?", answer: "World Wide Web" },
+    { question: "Which is the coldest place on Earth?", answer: "Antarctica" },
+    { question: "Which metal is liquid at room temperature?", answer: "Mercury" },
+    { question: "Which country is known as the Gift of the Nile?", answer: "Egypt" },
+    { question: "Who is the author of 'Harry Potter' series?", answer: "J.K. Rowling" },
+    { question: "Which is the largest state in India by area?", answer: "Rajasthan" },
+    { question: "Which planet is known for the Great Red Spot?", answer: "Jupiter" },
+    { question: "What is the national bird of India?", answer: "Peacock" },
+    { question: "Which country has the most population?", answer: "India" },
+    { question: "What is the capital of Canada?", answer: "Ottawa" },
+    { question: "Which element has the chemical symbol 'O'?", answer: "Oxygen" },
+    { question: "Which is the fastest animal on land?", answer: "Cheetah" },
+    { question: "Who discovered gravity?", answer: "Isaac Newton" },
+    { question: "What is the national animal of India?", answer: "Tiger" },
+    { question: "Which country is known as the Silicon Valley of India?", answer: "Bangalore" },
+    { question: "Which is the longest wall in the world?", answer: "Great Wall of China" },
+    { question: "Which planet is called Earth's twin?", answer: "Venus" },
+    { question: "Which is the smallest continent?", answer: "Australia" },
+    { question: "What is the capital of France?", answer: "Paris" },
+    { question: "Which is the largest island in the world?", answer: "Greenland" },
+    { question: "Who is known as the Missile Man of India?", answer: "Dr. A.P.J. Abdul Kalam" },
+    { question: "Which is the brightest planet in the night sky?", answer: "Venus" },
+    { question: "What is the currency of the United Kingdom?", answer: "Pound Sterling" },
+    { question: "Which country has the largest number of time zones?", answer: "Russia" }
+];
+
 // Open YouTube
 function playOnYouTube(query) {
     const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
     window.open(url, "_blank");
 }
+
+// === TASK MANAGER ===
+function getTasks() {
+    return JSON.parse(localStorage.getItem("ghostTasks") || "[]");
+}
+
+function saveTasks(tasks) {
+    localStorage.setItem("ghostTasks", JSON.stringify(tasks));
+}
+
+// === REMINDER SYSTEM ===
+let activeReminders = [];
+
+// Cancel all reminders
+function cancelAllReminders() {
+    activeReminders.forEach(timerId => clearTimeout(timerId));
+    activeReminders = [];
+    return "✅ All reminders cancelled.";
+}
+
+// === QUIZ SYSTEM (Global Variables) ===
+let quizActive = false;
+let quizQuestions = [];
+let quizIndex = 0;
+let quizScore = 0;
 
 // Core Logic
 function getResponse(message) {
@@ -232,7 +313,7 @@ function getResponse(message) {
 
     // ✅ Clear chat with password
     if (lower === "clear chat") {
-        const password = prompt("🔐 Enter password to clear chat:\n\n");
+        const password = prompt("🔐 Enter password to clear chat:\n\nPassword: Arpit@232422");
         if (password === "Arpit@232422") {
             Array.from(chatArea.children).forEach(child => {
                 if (child !== typingIndicator) {
@@ -253,6 +334,37 @@ function getResponse(message) {
         return;
     }
 
+    // === QUIZ SYSTEM ===
+    if (lower === "let's play quiz" || lower === "play quiz") {
+        quizActive = true;
+        quizScore = 0;
+        quizIndex = 0;
+        quizQuestions = [...gkQuiz].sort(() => 0.5 - Math.random()).slice(0, 10);
+        return `🎯 Quiz Started! I'll ask 10 questions. Let's begin!\n\nQ1: ${quizQuestions[0].question}`;
+    }
+
+    if (quizActive) {
+        const correctAnswer = quizQuestions[quizIndex].answer.toLowerCase().trim();
+        const userAnswer = message.toLowerCase().trim();
+
+        if (userAnswer === correctAnswer) {
+            quizScore++;
+            addMessage("✅ Correct!", false);
+        } else {
+            addMessage(`❌ Wrong! Correct answer was: ${quizQuestions[quizIndex].answer}`, false);
+        }
+
+        quizIndex++;
+
+        if (quizIndex < quizQuestions.length) {
+            return `Q${quizIndex + 1}: ${quizQuestions[quizIndex].question}`;
+        } else {
+            const finalScore = `🎉 Quiz Completed!\nYou scored ${quizScore} out of ${quizQuestions.length}.`;
+            quizActive = false;
+            return finalScore;
+        }
+    }
+
     // Greetings
     if (["hi", "hello", "hey", "hlo"].some(g => lower.includes(g))) {
         return "Hi there! I'm Ghost, How can I help you today?";
@@ -269,7 +381,7 @@ function getResponse(message) {
     if (lower.includes("your owner") || lower.includes("who made you") || lower.includes("who created you")) {
         return "I'm Ghost — Made By Arpit Pandey!";
     }
-    if (lower.includes("My Name") || lower.includes("my name") || lower.includes("who am i")) {
+    if (lower.includes("my name") || lower.includes("who am i")) {
         return "You are Arpit Pandey!";
     }
 
@@ -282,43 +394,106 @@ function getResponse(message) {
         return `Today is ${new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.`;
     }
 
-    // Math: Solve expressions like 1+2+3+4+5 or 10*2+5-3
-const mathRegex = /^([+\-]?(?:\d+\.?\d*|\.\d+)(?:[+\-*/](?:\d+\.?\d*|\.\d+))*)$/;
-
-if (mathRegex.test(message)) {
-    try {
-        let expr = message.replace(/x/g, '*');
-
-        // Security: Only allow safe math characters
-        if (/[^0-9+\-*/().\s]/.test(expr)) {
-            return "❌ Invalid characters in math expression.";
+    // Math
+    const mathRegex = /^([+\-]?(?:\d+\.?\d*|\.\d+)(?:[+\-*/](?:\d+\.?\d*|\.\d+))*)$/;
+    if (mathRegex.test(message)) {
+        try {
+            let expr = message.replace(/x/g, '*');
+            if (/[^0-9+\-*/().\s]/.test(expr)) {
+                return "❌ Invalid characters in math expression.";
+            }
+            const result = Function('"use strict"; return (' + expr + ')')();
+            if (isNaN(result) || !isFinite(result)) {
+                return "❌ Cannot calculate this expression.";
+            }
+            return `🧮 Result: ${message} = ${result}`;
+        } catch (e) {
+            return "❌ I couldn't solve this math problem.";
         }
-
-        // Evaluate safely without direct eval
-        const result = Function('"use strict"; return (' + expr + ')')();
-
-        if (isNaN(result) || !isFinite(result)) {
-            return "❌ Cannot calculate this expression.";
-        }
-
-        return `🧮 Result: ${message} = ${result}`;
-    } catch (e) {
-        return "❌ I couldn't solve this math problem.";
     }
-}
 
-    // Timer
-    const timerMatch = lower.match(/set a? timer for (\d+) (seconds?|minutes?)/);
-    if (timerMatch) {
-        const value = parseInt(timerMatch[1]);
-        const unit = timerMatch[2];
-        const ms = unit.startsWith("min") ? value * 60000 : value * 1000;
+    // === REMINDERS ===
+    const remindMatch1 = lower.match(/remind me to (.+?) in (\d+) (seconds?|minutes?|hours?)/);
+    const remindMatch2 = lower.match(/set a reminder for (\d+) (seconds?|minutes?|hours?)(?: to (.+?))?$/);
+    const cancelReminders = lower.includes("cancel all reminders");
 
-        setTimeout(() => {
-            alert(`⏰ Timer done! ${value} ${unit} completed.`);
+    if (cancelReminders) {
+        return cancelAllReminders();
+    }
+
+    if (remindMatch1 || remindMatch2) {
+        const [_, task, timeValue, unit, extraTask] = remindMatch1 || [...remindMatch2];
+        const finalTask = task || extraTask?.trim() || "this task";
+        const value = parseInt(timeValue);
+        let ms;
+
+        if (unit.startsWith("sec")) ms = value * 1000;
+        else if (unit.startsWith("min")) ms = value * 60000;
+        else if (unit.startsWith("hour")) ms = value * 3600000;
+
+        const timerId = setTimeout(() => {
+            alert(`🔔 Reminder: ${finalTask}`);
         }, ms);
 
-        return `✅ Timer set for ${value} ${unit}. I'll alert you when it's done!`;
+        activeReminders.push(timerId);
+
+        const displayUnit = unit.startsWith("hour") ? "hour" : unit;
+        return `✅ I'll remind you to "${finalTask}" in ${value} ${displayUnit}${value !== 1 ? 's' : ''}.`;
+    }
+
+    // === TASK MANAGER (To-Do List) ===
+    const addTaskMatch = lower.startsWith("add:");
+    const showTasks = lower.includes("show tasks") || lower.includes("my tasks");
+    const removeTaskMatch = lower.match(/remove:\s*(\d+)/i);
+
+    if (addTaskMatch) {
+        const task = message.slice(4).trim();
+        if (!task) return "❌ Please provide a task to add.";
+
+        const tasks = getTasks();
+        tasks.push({ text: task, time: new Date().toLocaleString() });
+        saveTasks(tasks);
+        return `✅ Task added: "${task}"`;
+    }
+
+    if (showTasks) {
+        const tasks = getTasks();
+        if (tasks.length === 0) return "📋 No tasks yet. Use 'Add: Task name' to add one.";
+
+        let table = `
+            <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
+                <tr style="background: #2d2d2d; color: white;">
+                    <th style="text-align: left;">#</th>
+                    <th style="text-align: left;">Task</th>
+                    <th style="text-align: left;">Added On</th>
+                </tr>
+        `;
+
+        tasks.forEach((task, i) => {
+            table += `
+                <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
+                    <td>${i + 1}</td>
+                    <td>${task.text}</td>
+                    <td>${task.time}</td>
+                </tr>
+            `;
+        });
+
+        table += `</table>`;
+        return table;
+    }
+
+    if (removeTaskMatch) {
+        const index = parseInt(removeTaskMatch[1]) - 1;
+        const tasks = getTasks();
+
+        if (index < 0 || index >= tasks.length) {
+            return "❌ Invalid task number.";
+        }
+
+        const removed = tasks.splice(index, 1)[0];
+        saveTasks(tasks);
+        return `🗑️ Removed task: "${removed.text}"`;
     }
 
     // Notes
@@ -424,7 +599,6 @@ document.addEventListener("click", () => {
         loadChatHistory();
         window.chatHistoryLoaded = true;
 
-        // Show welcome message only if no messages exist
         if (chatArea.children.length <= 1) {
             addMessage("Hello! I'm Ghost, your AI assistant. How can I help you today?", false);
         }
