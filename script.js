@@ -496,7 +496,7 @@ function getResponse(message) {
         return "I'm Ghost — Made By Arpit Pandey!";
     }
     if (lower.includes("my name") || lower.includes("who am i")) {
-        return "You are Arpit Pandey!";
+        return "Your Name Is Arpit!";
     }
 
     // Time & Date
