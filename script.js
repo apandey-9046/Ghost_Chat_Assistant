@@ -7,19 +7,29 @@ const voiceButton = document.getElementById("voiceButton");
 const typingIndicator = document.getElementById("typingIndicator");
 
 // Global variables for prompt system handling
+// --- Simple conversational states
 let awaitingTaskInput = false;
 let awaitingReminderInput = false;
 let awaitingReminderTime = false;
 let tempReminderText = "";
-let awaitingContactName = false; // <-- ADDED
-let tempContactName = ""; // <-- ADDED
-let awaitingExpenseDetails = false; // <-- ADDED
-let tempExpenseAmount = ""; // <-- ADDED
-let tempExpenseDescription = ""; // <-- ADDED
-let awaitingExpenseCategory = false; // <-- ADDED
-let awaitingExpenseMode = false; // <-- ADDED
-let awaitingContactConfirmation = false; // <-- ADDED
-let tempContactPhone = ""; // <-- ADDED
+
+// --- Multi-step 'add contact' state
+let awaitingContactName = false;
+let awaitingContactPhone = false;
+let awaitingContactConfirmation = false;
+let tempContact = {};
+
+// --- Multi-step 'add expense' state
+let awaitingExpenseDescription = false;
+let awaitingExpenseAmount = false;
+let awaitingExpenseCategory = false;
+let awaitingExpenseMode = false;
+let awaitingExpenseConfirmation = false;
+let tempExpense = {};
+
+// --- Command queue for multi-command processing
+let commandQueue = [];
+let isProcessingQueue = false;
 
 // Debounce timer for auto-sending typed messages
 let typingTimeout = null;
@@ -187,17 +197,23 @@ function speak(text) {
     utterance.volume = 1;
     utterance.onstart = () => {
         isSpeaking = true;
-        if (isMicOn) recognition.stop(); // <-- ADDED: Stop recognition when speaking starts
+        if (isMicOn && recognition) {
+            try {
+                recognition.stop(); // Stop recognition when assistant starts speaking
+            } catch (e) {
+                console.log("Recognition already stopped or error stopping during speech start.", e);
+            }
+        }
     };
     utterance.onend = () => {
         isSpeaking = false;
-        if (isMicOn) {
+        if (isMicOn && recognition) {
             setTimeout(() => {
                 if (isMicOn && !isSpeaking) {
                     try {
-                        recognition.start();
+                        recognition.start(); // Restart recognition only if mic is still on and not speaking
                     } catch (e) {
-                        console.log("Could not restart recognition after speech.");
+                        console.log("Could not restart recognition after speech.", e);
                     }
                 }
             }, 500);
@@ -252,12 +268,22 @@ if (SpeechRecognition) {
     recognition.lang = 'en-US';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    recognition.continuous = false; // Keep continuous off for better control
+    recognition.continuous = false;
+
+    recognition.onstart = () => {
+        if (isSpeaking) {
+            synth.cancel(); // Interrupt assistant if it's speaking
+        }
+    };
+
     micButton.addEventListener("click", () => {
         navigator.mediaDevices.getUserMedia({ audio: true }).then(() => {
             isMicOn = !isMicOn;
             if (isMicOn) {
                 try {
+                    if (isSpeaking) {
+                        synth.cancel(); // Immediately stop speaking when mic is activated
+                    }
                     recognition.start();
                     micButton.innerHTML = "🔴";
                     micButton.style.color = "#ff4757";
@@ -293,22 +319,18 @@ if (SpeechRecognition) {
             .map(result => result.transcript)
             .join('')
             .trim();
+
         if (transcript) {
             userInput.value = transcript;
-            // <-- ADDED: Prioritize user input over speaking
-            if (isSpeaking) {
-                synth.cancel();
-                isSpeaking = false;
-            }
             setTimeout(() => {
                 if (isMicOn) {
-                    sendMessage(); // <-- CHANGED: Call sendMessage directly
+                    sendMessage();
                 }
-            }, 100); // <-- CHANGED: Reduced delay for quicker response
+            }, 500);
         }
     });
     recognition.addEventListener("end", () => {
-        // <-- CHANGED: Simplified mic restart logic
+        // Simplified mic restart logic
         if (isMicOn && !isSpeaking) {
             setTimeout(() => {
                 if (isMicOn && !isSpeaking) {
@@ -359,7 +381,7 @@ let featureList = `
 ✅ <strong>Time & Date:</strong> "What time is it?"<br>
 ✅ <strong>Notes:</strong> "Note: Buy milk"<br>
 ✅ <strong>Timer:</strong> "Set timer for 5 minutes"<br>
-✅ <strong>To-Do List:</strong> "Add: Call mom", "Show tasks", "Remove: 1"<br>
+✅ <strong>To-Do List:</strong> "Add: Call mom", "Show tasks", "Remove: 1", "Complete: 1"<br>
 ✅ <strong>BMI Calculator:</strong> "My weight 60kg, height 160cm"<br>
 ✅ <strong>Unit Converter:</strong> "5 km in miles", "10 kg to pounds"<br>
 ✅ <strong>Currency:</strong> "10 USD in INR"<br>
@@ -368,7 +390,7 @@ let featureList = `
 ✅ <strong>Meditation:</strong> "Start 5-minute meditation"<br>
 ✅ <strong>Flashcards:</strong> "Teach me 5 Spanish words"<br>
 ✅ <strong>Jokes & Fun:</strong> "Tell me a joke"<br>
-✅ <strong>Reminders:</strong> "Remind me to drink water in 5 min"<br>
+✅ <strong>Reminders:</strong> "Remind me to drink water in 5 min", "Clear reminders"<br>
 ✅ <strong>Quiz:</strong> "Let's play quiz", "Start quiz", "Quiz time"<br>
 ✅ <strong>Rock Paper Scissors:</strong> "Play rps", "RPS", "Let's play a game" (loops until exit)<br>
 ✅ <strong>Habit Tracker:</strong> "Track habit: Meditation", "Show habits"<br>
@@ -441,6 +463,15 @@ const gkQuiz = [
     }
 ];
 
+// Function to shuffle an array using Fisher-Yates algorithm
+function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+}
+
 // Quiz-related variables
 let quizActive = false;
 let quizScore = 0;
@@ -453,7 +484,7 @@ function startQuizTimer() {
     clearQuizTimer();
     quizTimer = setTimeout(() => {
         if (quizActive && quizIndex < quizQuestions.length) {
-            addMessage(`⏰ Time's up! Correct answer was: ${quizQuestions[quizIndex].answer} (${quizQuestions[quizIndex].options.find(o => o.startsWith(quizQuestions[quizIndex].answer))?.split(')')[1]?.trim()})`, false);
+            addMessage(`⏰ Time's up! Correct answer was: ${quizQuestions[quizIndex].answer}`, false);
             playWrongSound();
             quizIndex++;
             if (quizIndex < quizQuestions.length) {
@@ -568,18 +599,19 @@ function saveExpenses(expenses) {
     localStorage.setItem("ghostExpenses", JSON.stringify(expenses));
 }
 
-// Function to add an expense entry (Updated flow)
-function addExpense(amount, description, category, mode) {
+// Function to add an expense entry
+function addExpense(expenseData) {
     const expenses = getExpenses();
     const expense = {
-        amount: parseFloat(amount),
-        description: description,
-        category: category,
-        mode: mode,
+        amount: parseFloat(expenseData.amount),
+        description: expenseData.description,
+        category: expenseData.category,
+        mode: expenseData.mode,
         date: new Date().toLocaleString()
     };
     expenses.push(expense);
     saveExpenses(expenses);
+    const { amount, description } = expenseData;
     const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
     return `✅ Expense added: ₹${amount} for ${description} (${category}, ${mode})<br>📊 Total spent: ₹${total.toFixed(2)}`;
 }
@@ -607,8 +639,8 @@ function showExpenses() {
             <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
                 <td>₹${expense.amount.toFixed(2)}</td>
                 <td>${expense.description}</td>
-                <td>${expense.category || 'N/A'}</td>
-                <td>${expense.mode || 'N/A'}</td>
+                <td>${expense.category}</td>
+                <td>${expense.mode}</td>
                 <td>${expense.date}</td>
             </tr>
         `;
@@ -623,30 +655,37 @@ function showExpenses() {
     return table;
 }
 
-// Pomodoro timer variables
 let pomodoroTimer = null;
 let pomodoroTimeLeft = 0;
+let pomodoroEndTime = null;
 
 // Function to start a pomodoro study timer
 function startPomodoro(minutes = 25) {
     if (pomodoroTimer) {
-        clearTimeout(pomodoroTimer);
+        clearInterval(pomodoroTimer); // Use clearInterval for setInterval
     }
     pomodoroTimeLeft = minutes * 60;
-    const endTime = new Date(Date.now() + pomodoroTimeLeft * 1000);
-    function updateTimer() {
-        if (pomodoroTimeLeft <= 0) {
+    pomodoroEndTime = Date.now() + pomodoroTimeLeft * 1000; // Calculate end time
+
+    const updateTimerDisplay = () => {
+        const remainingSeconds = Math.round((pomodoroEndTime - Date.now()) / 1000);
+        if (remainingSeconds <= 0) {
+            clearInterval(pomodoroTimer);
+            pomodoroTimer = null;
             addMessage("⏰ Pomodoro session completed! Time for a break!", false);
             if (Notification.permission === "granted") {
                 new Notification("Ghost - Pomodoro", { body: "Pomodoro session completed! Time for a break!" });
             }
-            pomodoroTimer = null;
             return;
         }
-        pomodoroTimeLeft--;
-        setTimeout(updateTimer, 1000);
-    }
-    pomodoroTimer = setTimeout(updateTimer, 1000);
+        const mins = Math.floor(remainingSeconds / 60);
+        const secs = remainingSeconds % 60;
+        // Update a UI element if available, or log to console for now
+        // console.log(`Pomodoro: ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`);
+    };
+
+    pomodoroTimer = setInterval(updateTimerDisplay, 1000); // Use setInterval
+    updateTimerDisplay(); // Initial call to display immediately
     return `⏱️ Pomodoro timer started for ${minutes} minutes!`;
 }
 
@@ -723,6 +762,32 @@ function setGoal(goalText) {
     return `🎯 Goal set: "${goalText}"`;
 }
 
+// Function to mark a goal as complete
+function completeGoal(goalId) {
+    const goals = getGoals();
+    const goalIndex = parseInt(goalId) - 1;
+    if (goalIndex >= 0 && goalIndex < goals.length) {
+        if (goals[goalIndex].status === "completed") {
+            return `🤔 Goal "${goals[goalIndex].text}" is already marked as completed.`;
+        }
+        goals[goalIndex].status = "completed";
+        saveGoals(goals);
+        return `🎉 Great job! Goal "${goals[goalIndex].text}" marked as completed.`;
+    }
+    return "❌ Invalid goal ID. Use 'show goals' to see the list with IDs.";
+}
+
+function deleteGoal(goalId) {
+    const goals = getGoals();
+    const goalIndex = parseInt(goalId) - 1;
+    if (goalIndex >= 0 && goalIndex < goals.length) {
+        const deletedGoal = goals.splice(goalIndex, 1);
+        saveGoals(goals);
+        return `🗑️ Goal "${deletedGoal[0].text}" has been deleted.`;
+    }
+    return "❌ Invalid goal ID. Use 'show goals' to see the list with IDs.";
+}
+
 // Function to display goals in a table
 function showGoals() {
     const goals = getGoals();
@@ -732,15 +797,17 @@ function showGoals() {
     let table = `
         <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
             <tr style="background: #2d2d2d; color: white;">
+                <th style="text-align: left;">ID</th>
                 <th style="text-align: left;">Goal</th>
                 <th style="text-align: left;">Status</th>
                 <th style="text-align: left;">Created</th>
             </tr>
     `;
-    goals.forEach(goal => {
+    goals.forEach((goal, index) => {
         const status = goal.status === "completed" ? "✅ Completed" : "⏳ Pending";
         table += `
             <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
+                <td>${index + 1}</td>
                 <td>${goal.text}</td>
                 <td>${status}</td>
                 <td>${goal.createdAt}</td>
@@ -748,7 +815,7 @@ function showGoals() {
         `;
     });
     table += `</table>`;
-    return table; // <-- CHANGED: Return only the table
+    return table;
 }
 
 // Function to get contacts from localStorage
@@ -761,7 +828,7 @@ function saveContacts(contacts) {
     localStorage.setItem("ghostContacts", JSON.stringify(contacts));
 }
 
-// Function to add a contact (Updated flow)
+// Function to add a contact
 function addContact(name, phone) {
     const contacts = getContacts();
     const contact = {
@@ -803,7 +870,7 @@ function showContacts() {
 
 // Function to generate a random password
 function generatePassword(length = 12) {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?";
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.><>?";
     let password = "";
     for (let i = 0; i < length; i++) {
         password += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -959,105 +1026,92 @@ function showFlashcards() {
 const dailyConversations = {
     greetings: [
         "hi", "hello", "hey", "hlo", "namaste", "good morning", "good afternoon",
-        "good evening", "sup", "whats up", "howdy", "greetings", "yo", "hai", "hii"
+        "good evening", "sup", "whats up", "howdy", "greetings", "yo", "hai", "hii", "heya", "what's up",
+        "hi ghost", "hello ghost", "hey there", "holla", "g'day", "good to see you", "nice to meet you", "how do you do", "hi bot", "hello bot"
     ],
     howAreYou: [
         "how are you", "how r u", "how are u", "kaise ho", "how are you doing",
-        "how you doing", "are you fine", "are you okay", "how's it going", "how do you do", "kya haal hai"
+        "how you doing", "are you fine", "are you okay", "how's it going", "how do you do", "kya haal hai", "kaise ho", "how's life", "how have you been",
+        "what's up ghost", "how's your day", "you good", "how are things", "how are you feeling", "what's new"
     ],
     myName: [
-        "my name", "who am i", "what is my name", "do you know my name", "tell me my name", "what's my name"
+        "my name", "who am i", "what is my name", "do you know my name", "tell me my name", "what's my name", "can you tell me my name",
+        "who am i to you", "what should i call myself", "my identity", "who am i really", "do you know who i am"
     ],
     yourName: [
-        "your name", "what is your name", "who are you", "what are you", "identify yourself", "who r u"
+        "your name", "what is your name", "who are you", "what are you", "identify yourself", "who r u", "what should i call you", "what's your name",
+        "tell me about yourself", "who is ghost", "your identity", "what do they call you", "what do you go by"
     ],
     owner: [
         "your owner", "who made you", "who created you", "who built you",
-        "who developed you", "who programmed you", "who is your creator", "who is your developer"
+        "who developed you", "who programmed you", "who is your creator", "who is your developer", "who made this ai", "who built this bot",
+        "your developer", "your programmer", "who's your boss", "who brought you to life", "who designed you"
     ],
     time: [
-        "time", "what time", "current time", "tell me time", "what's the time", "time now", "clock"
+        "time", "what time", "current time", "tell me time", "what's the time", "time now", "clock", "what time is it",
+        "show me the time", "current hour", "what's the clock saying", "do you know the time", "can you tell me the time", "what hour is it"
     ],
     date: [
-        "date", "today", "what date", "current date", "what is today", "what's today's date", "calendar"
+        "date", "today", "what date", "current date", "what is today", "what's today's date", "calendar", "what's the date",
+        "show me the date", "today's calendar", "what day is it", "can you tell me the date", "current day", "date today"
     ],
     help: [
         "what can you do", "help", "features", "what can you do", "show features",
-        "what are your features", "capabilities", "what can you help me with", "commands", "options", "functions"
+        "what are your features", "capabilities", "what can you help me with", "commands", "options", "functions", "how can you help me",
+        "list commands", "show what you can do", "your abilities", "guide me", "i need help", "assist me"
     ],
     stop: [
-        "stop", "shut up", "cancel", "quiet", "stop talking", "be quiet", "silence", "pause", "mute"
+        "stop", "shut up", "cancel", "quiet", "stop talking", "be quiet", "silence", "pause", "mute", "enough",
+        "halt", "terminate", "cease", "hold on", "that's enough", "please stop", "cut it out", "desist"
     ],
     clear: [
-        "clear chat", "clear history", "delete chat", "reset chat", "forget everything", "start over"
+        "clear chat", "clear history", "delete chat", "reset chat", "forget everything", "start over", "erase chat",
+        "clear conversation", "wipe chat", "empty chat", "remove all messages", "clear all data", "reset all"
     ]
 };
 
-// Function to process multiple commands in a single message
-function processMultiCommand(message) {
-    // List of all command triggers
-    const commandTriggers = [
-        // Quiz triggers
-        "let's play quiz", "play quiz", "start quiz", "quiz time", "quiz", "i want to play quiz", "take a quiz", "give me a quiz",
-        // RPS triggers
-        "rps", "rock paper scissors", "play rps", "lets play game", "game", "play game", "lets play rps", "play rock paper scissors",
-        // Other specific triggers
-        "add contact", "show contacts", "view contacts", "my contacts",
-        "add expense", "log expense", "show expenses", "view expenses", "my expenses",
-        "track habit", "log habit", "show habits", "view habits", "my habits",
-        "set goal", "add goal", "show goals", "view goals", "my goals",
-        "log mood", "track mood", "show mood", "view mood", "mood history",
-        "plan day", "add plan", "show plan", "view plan", "daily plan",
-        "log water", "log health", "show health", "view health", "health log",
-        "add flashcard", "show flashcards", "view flashcards", "my flashcards",
-        "generate password", "create password",
-        "switch voice to", "list voices",
-        "remind me", "set reminder", "alert me in", "notify me", "add reminder",
-        "add task", "create task", "add new task", "create new task", "make a task", "add a task", "show tasks", "my tasks", "todo", "list tasks", "view tasks",
-        "note:", "save:", "save note", "add note", "create note", "my notes", "saved notes", "view notes", "show notes",
-        "weight", "height", "bmi", "body mass index",
-        "play", "youtube", "song", "music", "listen to",
-        "help", "features", "what can you do", "show features", "what are your features", "capabilities", "what can you help me with",
-        "stop", "shut up", "cancel", "quiet", "stop talking", "be quiet", "silence",
-        "clear chat", "clear history", "delete chat", "reset chat",
-        "hi", "hello", "hey", "hlo", "namaste", "good morning", "good afternoon", "good evening", "sup", "whats up", "howdy", "greetings",
-        "how are you", "how r u", "how are u", "kaise ho", "how are you doing", "how you doing", "are you fine", "are you okay",
-        "my name", "who am i", "what is my name", "do you know my name",
-        "your name", "what is your name", "who are you", "what are you",
-        "your owner", "who made you", "who created you", "who built you", "who developed you", "who programmed you",
-        "time", "what time", "current time", "tell me time",
-        "date", "today", "what date", "current date", "what is today",
-        "what is", "solve", "calculate", "=", // Math
-        "usd", "inr", "eur", "gbp", "jpy", "cad", "aud", "chf", "cny", "sek", "nzd", "mxn", "sgd", "hkd", "nok", "krw", "try", "rub", "brl", "zar", "rs", "$", "€", "£", "¥" // Currency
-    ];
-
-    // Create a regex to split the message by command triggers
-    const triggerRegex = new RegExp(`(?=\\b(?:${commandTriggers.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b)`, 'gi');
-    const commands = message.split(triggerRegex).filter(cmd => cmd.trim() !== '');
-
-    if (commands.length > 1) {
-        // Process commands sequentially
-        let index = 0;
-        const processNext = () => {
-            if (index < commands.length) {
-                const cmd = commands[index].trim();
-                index++;
-                if (cmd) { // Ensure command is not empty
-                    const response = getResponse(cmd);
-                    if (response !== undefined) {
-                        addMessage(response, false);
-                        safeSpeak(response);
-                    }
-                }
-                // Add a small delay between processing commands
-                setTimeout(processNext, 300 + Math.random() * 200);
-            }
-        };
-        processNext();
-        return true; // Indicating multi-command processing started
+// Function to process the command queue sequentially
+async function processCommandQueue() {
+    if (isProcessingQueue) {
+        return;
     }
-    return false; // Not a multi-command
+    if (commandQueue.length === 0) {
+        isProcessingQueue = false; // Ensure it's false when queue is truly empty
+        hideTyping();
+        return;
+    }
+    isProcessingQueue = true; // Set to true when starting to process
+    const command = commandQueue.shift();
+
+    showTyping();
+
+    // Use a promise to wait for a bit
+    await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 200));
+
+    const response = getResponse(command);
+    if (response !== undefined) {
+        addMessage(response, false);
+        safeSpeak(response);
+    }
+
+    // Wait for speech to finish before processing the next command
+    if (isSpeaking) {
+        await new Promise(resolve => {
+            const checkSpeaking = setInterval(() => {
+                if (!isSpeaking) {
+                    clearInterval(checkSpeaking);
+                    resolve();
+                }
+            }, 100);
+        });
+    }
+
+    // Add a small delay before next command
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    processCommandQueue(); // Process next command
 }
+
 
 // Core function to generate response based on user message
 function getResponse(message) {
@@ -1131,100 +1185,81 @@ function getResponse(message) {
         }
     }
 
-    // New awaiting states for contact and expense
+    if (lower.includes("clear reminders") || lower.includes("cancel reminders") || lower.includes("remove reminders") || lower.includes("delete reminders") || lower.includes("stop all reminders")) {
+        activeReminders.forEach(timerId => clearTimeout(timerId));
+        activeReminders = [];
+        return "🗑️ All active reminders have been cleared.";
+    }
+
+    // --- Conversational Flows ---
     if (awaitingContactName) {
         awaitingContactName = false;
-        const name = message.trim();
-        if (!name) return "❌ Please provide a name for the contact.";
-        tempContactName = name;
-        return `📞 Okay, what is ${name}'s phone number?`;
+        tempContact.name = message.trim();
+        awaitingContactPhone = true;
+        return `Got it. What is ${tempContact.name}'s phone number?`;
     }
-
-    if (awaitingContactConfirmation) { // <-- ADDED: Handle contact confirmation
+    if (awaitingContactPhone) {
+        awaitingContactPhone = false;
+        tempContact.phone = message.trim();
+        awaitingContactConfirmation = true;
+        return `Great. I will save the contact:<br><b>Name:</b> ${tempContact.name}<br><b>Phone:</b> ${tempContact.phone}<br>Should I save it? (yes/no)`;
+    }
+    if (awaitingContactConfirmation) {
         awaitingContactConfirmation = false;
-        if (lower === "confirm") {
-            const result = addContact(tempContactName, tempContactPhone);
-            tempContactName = "";
-            tempContactPhone = "";
-            return result;
-        } else if (lower === "cancel") {
-            tempContactName = "";
-            tempContactPhone = "";
-            return "Contact addition cancelled.";
+        if (lower === 'yes' || lower === 'y') {
+            const response = addContact(tempContact.name, tempContact.phone);
+            tempContact = {};
+            return response;
         } else {
-            // If user provides something else, treat it as the phone number
-            const phone = message.trim();
-            if (!phone) return "❌ Please provide a phone number or type 'cancel'.";
-            tempContactPhone = phone;
-            const previewMsg = `🔍 Preview Contact:
-Name: ${tempContactName}
-Phone: ${tempContactPhone}
-Type 'confirm' to save or 'cancel' to discard.`;
-            awaitingContactConfirmation = true; // Re-enable confirmation state
-            return previewMsg;
+            tempContact = {};
+            return "Okay, I've cancelled adding the contact.";
         }
     }
-
-    if (awaitingExpenseDetails) {
-        awaitingExpenseDetails = false;
-        const details = message.trim();
-        if (!details) return "❌ Please provide expense details (amount and description). Example: '50 for food'";
-        const expenseMatch = details.match(/(\d+(?:\.\d+)?)\s*(?:for|on)?\s*(.+)/i);
-        if (expenseMatch && expenseMatch[1] && expenseMatch[2]) {
-            tempExpenseAmount = expenseMatch[1];
-            tempExpenseDescription = expenseMatch[2];
-            awaitingExpenseCategory = true;
-            return `🏷️ What category is this expense? (e.g., Food, Travel, Entertainment)`;
-        } else {
-            return "❌ Please specify amount and description correctly. Example: '50 for food'";
-        }
+    if (awaitingExpenseDescription) {
+        awaitingExpenseDescription = false;
+        tempExpense.description = message.trim();
+        awaitingExpenseAmount = true;
+        return `And what was the amount for "${tempExpense.description}"?`;
     }
-
+    if (awaitingExpenseAmount) {
+        const amount = parseFloat(message.trim());
+        if (isNaN(amount)) {
+            return "❌ That doesn't seem like a valid amount. Please enter a number.";
+        }
+        awaitingExpenseAmount = false;
+        tempExpense.amount = amount;
+        awaitingExpenseCategory = true;
+        return `What category does this fall into? (e.g., Food, Travel, Shopping)`;
+    }
     if (awaitingExpenseCategory) {
         awaitingExpenseCategory = false;
-        const category = message.trim();
-        if (!category) return "❌ Please provide a category.";
-        tempExpenseCategory = category; // <-- ADDED
+        tempExpense.category = message.trim();
         awaitingExpenseMode = true;
         return `💳 How did you pay? (e.g., Cash, Card, Wallet, Online)`;
     }
-
     if (awaitingExpenseMode) {
         awaitingExpenseMode = false;
-        const mode = message.trim();
-        if (!mode) return "❌ Please provide the payment mode.";
-        tempExpenseMode = mode; // <-- ADDED
-
-        // Preview before saving
-        const previewMsg = `🔍 Preview Expense:
-Amount: ₹${tempExpenseAmount}
-Description: ${tempExpenseDescription}
-Category: ${tempExpenseCategory}
-Mode: ${tempExpenseMode}
-Type 'confirm' to save or 'cancel' to discard.`;
-        awaitingExpenseConfirmation = true; // <-- ADDED: New state for expense confirmation
-        return previewMsg;
+        tempExpense.mode = message.trim();
+        awaitingExpenseConfirmation = true;
+        return `Got it. I'm about to add:<br>
+            <b>Expense:</b> ${tempExpense.description}<br>
+            <b>Amount:</b> ₹${tempExpense.amount}<br>
+            <b>Category:</b> ${tempExpense.category}<br>
+            <b>Mode:</b> ${tempExpense.mode}<br>
+            Is this correct? (yes/no)`;
     }
-
-    if (awaitingExpenseConfirmation) { // <-- ADDED: Handle expense confirmation
+    if (awaitingExpenseConfirmation) {
         awaitingExpenseConfirmation = false;
-        if (lower === "confirm") {
-            const result = addExpense(tempExpenseAmount, tempExpenseDescription, tempExpenseCategory, tempExpenseMode);
-            tempExpenseAmount = "";
-            tempExpenseDescription = "";
-            tempExpenseCategory = "";
-            tempExpenseMode = "";
-            return result;
-        } else if (lower === "cancel") {
-            tempExpenseAmount = "";
-            tempExpenseDescription = "";
-            tempExpenseCategory = "";
-            tempExpenseMode = "";
-            return "Expense addition cancelled.";
+        if (lower === 'yes' || lower === 'y') {
+            const response = addExpense(tempExpense);
+            tempExpense = {};
+            return response;
         } else {
-            return "Please type 'confirm' to save or 'cancel' to discard the expense.";
+            tempExpense = {};
+            return "Okay, I've cancelled adding the expense.";
         }
     }
+
 
     // Stop command (highest priority)
     if (dailyConversations.stop.some(cmd => lower.includes(cmd))) {
@@ -1235,18 +1270,25 @@ Type 'confirm' to save or 'cancel' to discard.`;
 
     // Clear command
     if (dailyConversations.clear.some(cmd => lower.includes(cmd))) {
-        const password = prompt("🔐 Enter password to clear chat:");
-        if (password === "Arpit@232422") {
-            Array.from(chatArea.children).forEach(child => {
-                if (child !== typingIndicator) {
-                    child.remove();
-                }
-            });
-            localStorage.removeItem("ghostChatHistory");
-            return "✅ All Chats history Cleared successfully.";
-        } else {
-            return "❌ Incorrect password! Access denied.";
-        }
+        // Removed password check for simplicity and to avoid blocking interaction
+        Array.from(chatArea.children).forEach(child => {
+            if (child !== typingIndicator) {
+                child.remove();
+            }
+        });
+        localStorage.removeItem("ghostChatHistory");
+        localStorage.removeItem("ghostTasks"); // Clear tasks as well
+        localStorage.removeItem("ghostNotes"); // Clear notes as well
+        localStorage.removeItem("ghostHabits"); // Clear habits as well
+        localStorage.removeItem("ghostExpenses"); // Clear expenses as well
+        localStorage.removeItem("ghostMoods"); // Clear moods as well
+        localStorage.removeItem("ghostGoals"); // Clear goals as well
+        localStorage.removeItem("ghostContacts"); // Clear contacts as well
+        localStorage.removeItem("ghostDailyPlan"); // Clear daily plan as well
+        localStorage.removeItem("ghostHealthLogs"); // Clear health logs as well
+        localStorage.removeItem("ghostFlashcards"); // Clear flashcards as well
+
+        return "✅ All chat history and stored data cleared successfully.";
     }
 
     // Help command
@@ -1270,156 +1312,179 @@ Type 'confirm' to save or 'cancel' to discard.`;
     }
 
     // Habit Tracker
-    if (lower.includes("track habit") || lower.includes("log habit")) {
-        const habitMatch = message.match(/(?:track|log) habit:?\s*(.+)/i);
+    if (lower.includes("track habit") || lower.includes("log habit") || lower.includes("add habit") || lower.includes("new habit") || lower.includes("set habit")) {
+        const habitMatch = message.match(/(?:track|log|add|new|set) habit:?\s*(.+)/i);
         if (habitMatch && habitMatch[1]) {
             return trackHabit(habitMatch[1].trim());
         } else {
             return "❌ Please specify habit name. Example: 'Track habit: Meditation'";
         }
     }
-    if (lower.includes("show habits") || lower.includes("view habits") || lower.includes("my habits")) {
+    if (lower.includes("show habits") || lower.includes("view habits") || lower.includes("my habits") || lower.includes("list habits") || lower.includes("what are my habits")) {
         return showHabits();
     }
 
-    // Expense Manager (Updated flow)
-    if (lower.includes("add expense") || lower.includes("log expense")) {
-        const expenseMatch = message.match(/(?:add|log) expense:?\s*(.+)/i);
+    // Expense Manager
+    if (lower.includes("add expense") || lower.includes("log expense") || lower.includes("new expense") || lower.includes("track expense") || lower.includes("record expense") || lower.includes("record a cost") || lower.includes("expense entry")) {
+        const expenseMatch = message.match(/(?:add|log|new|track|record) expense:?\s*(\d+(?:\.\d+)?)\s*(?:for\s*(.+?))?\s*(?:\((\w+)(?:,\s*(\w+))?\))?/i);
         if (expenseMatch && expenseMatch[1]) {
-            // Start the flow for getting details
-            awaitingExpenseDetails = true;
-            return getResponse(expenseMatch[1]); // Re-process the details part
+            // For one-shot expense adding
+            const amount = parseFloat(expenseMatch[1]);
+            const description = expenseMatch[2] ? expenseMatch[2].trim() : 'Unspecified';
+            const category = expenseMatch[3] ? expenseMatch[3].trim() : 'Uncategorized';
+            const mode = expenseMatch[4] ? expenseMatch[4].trim() : 'Unknown';
+
+            tempExpense = { amount, description, category, mode };
+            awaitingExpenseConfirmation = true;
+            return `Got it. I'm about to add:<br>
+            <b>Expense:</b> ${tempExpense.description}<br>
+            <b>Amount:</b> ₹${tempExpense.amount}<br>
+            <b>Category:</b> ${tempExpense.category}<br>
+            <b>Mode:</b> ${tempExpense.mode}<br>
+            Is this correct? (yes/no)`;
         } else {
-            awaitingExpenseDetails = true;
-            return "💰 Please provide the expense details (amount and description). Example: 'Add expense: 50 for food'";
+            // Start conversational flow
+            awaitingExpenseDescription = true;
+            return "Okay, what was the expense for?";
         }
     }
-    if (lower.includes("show expenses") || lower.includes("view expenses") || lower.includes("my expenses")) {
+    if (lower.includes("show expenses") || lower.includes("view expenses") || lower.includes("my expenses") || lower.includes("what are my expenses") || lower.includes("list expenses") || lower.includes("expense report") || lower.includes("check expenses") || lower.includes("all expenses")) {
         return showExpenses();
     }
 
     // Pomodoro Timer
-    if (lower.includes("start pomodoro") || lower.includes("pomodoro timer")) {
+    if (lower.includes("start pomodoro") || lower.includes("pomodoro timer") || lower.includes("set pomodoro") || lower.includes("begin pomodoro") || lower.includes("pomodoro start")) {
         const timeMatch = message.match(/(\d+)\s*(?:min|minute|minutes)/i);
         const minutes = timeMatch ? parseInt(timeMatch[1]) : 25;
         return startPomodoro(minutes);
     }
-    if (lower.includes("study timer") || lower.includes("focus timer")) {
+    if (lower.includes("study timer") || lower.includes("focus timer") || lower.includes("set study timer") || lower.includes("start focus time")) {
         const timeMatch = message.match(/(\d+)\s*(?:min|minute|minutes)/i);
         const minutes = timeMatch ? parseInt(timeMatch[1]) : 25;
         return startPomodoro(minutes);
     }
 
     // Mood Journal
-    if (lower.includes("log mood") || lower.includes("track mood")) {
-        const moodMatch = message.match(/(?:log|track) mood:?\s*(.+)/i);
+    if (lower.includes("log mood") || lower.includes("track mood") || lower.includes("add mood") || lower.includes("how am i feeling") || lower.includes("my mood today")) {
+        const moodMatch = message.match(/(?:log|track|add) mood:?\s*(.+)/i);
         if (moodMatch && moodMatch[1]) {
             return logMood(moodMatch[1].trim());
         } else {
             return "❌ Please specify your mood. Example: 'Log mood: Happy'";
         }
     }
-    if (lower.includes("show mood") || lower.includes("view mood") || lower.includes("mood history")) {
+    if (lower.includes("show mood") || lower.includes("view mood") || lower.includes("mood history") || lower.includes("my moods") || lower.includes("how have i been feeling")) {
         return showMoodHistory();
     }
 
+    // Goal Management
+    if (lower.startsWith("complete goal") || lower.startsWith("finish goal") || lower.startsWith("mark goal as complete") || lower.includes("goal done") || lower.includes("achieve goal")) {
+        const match = lower.match(/(?:complete|finish|mark) goal(?: as complete)?\s*(\d+)/);
+        if (match && match[1]) {
+            return completeGoal(match[1]);
+        }
+        return "❌ Please provide a goal ID. Example: 'complete goal 1'";
+    }
+    if (lower.startsWith("delete goal") || lower.startsWith("remove goal") || lower.includes("erase goal") || lower.includes("discard goal")) {
+        const match = lower.match(/(?:delete|remove) goal\s*(\d+)/);
+        if (match && match[1]) {
+            return deleteGoal(match[1]);
+        }
+        return "❌ Please provide a goal ID. Example: 'delete goal 1'";
+    }
+
     // Goal Tracker
-    if (lower.includes("set goal") || lower.includes("add goal")) {
-        const goalMatch = message.match(/(?:set|add) goal:?\s*(.+)/i);
+    if (lower.includes("set goal") || lower.includes("add goal") || lower.includes("create goal") || lower.includes("new goal") || lower.includes("plan goal") || lower.includes("establish goal") || lower.includes("define goal")) {
+        const goalMatch = message.match(/(?:set|add|create|new|plan|establish|define) goal:?\s*(.+)/i);
         if (goalMatch && goalMatch[1]) {
             return setGoal(goalMatch[1].trim());
         } else {
             return "❌ Please specify your goal. Example: 'Set goal: Learn JavaScript'";
         }
     }
-    if (lower.includes("show goals") || lower.includes("view goals") || lower.includes("my goals")) {
-        return showGoals(); // <-- CHANGED: Now returns only the table
+    if (lower.includes("show goals") || lower.includes("view goals") || lower.includes("my goals") || lower.includes("what are my goals") || lower.includes("list goals") || lower.includes("goal list") || lower.includes("current goals") || lower.includes("display goals")) {
+        return showGoals();
     }
 
-    // Contact Manager (Updated flow)
-    if (lower.includes("add contact")) {
+    // Contact Manager
+    if (lower.includes("add contact") || lower.includes("new contact") || lower.includes("save contact") || lower.includes("create contact") || lower.includes("store contact") || lower.includes("add phone number")) {
         const contactMatch = message.match(/add contact:?\s*(.+?)\s+(\d+)/i);
         if (contactMatch && contactMatch[1] && contactMatch[2]) {
-            // Preview before saving if full details are provided
-            const name = contactMatch[1].trim();
-            const phone = contactMatch[2].trim();
-            const previewMsg = `🔍 Preview Contact:
-Name: ${name}
-Phone: ${phone}
-Type 'confirm' to save or 'cancel' to discard.`;
-            tempContactName = name;
-            tempContactPhone = phone;
+            // For one-shot contact adding
+            tempContact = {
+                name: contactMatch[1],
+                phone: contactMatch[2]
+            };
             awaitingContactConfirmation = true;
-            return previewMsg;
+            return `Great. I will save the contact:<br><b>Name:</b> ${tempContact.name}<br><b>Phone:</b> ${tempContact.phone}<br>Should I save it? (yes/no)`;
         } else {
             awaitingContactName = true;
-            return "📞 Okay, what is the contact's name?";
+            return "Sure, what is the name of the contact?";
         }
     }
-    if (lower.includes("show contacts") || lower.includes("view contacts") || lower.includes("my contacts")) {
+    if (lower.includes("show contacts") || lower.includes("view contacts") || lower.includes("my contacts") || lower.includes("contact list") || lower.includes("list contacts") || lower.includes("who are my contacts") || lower.includes("contacts")) {
         return showContacts();
     }
 
     // Password Generator
-    if (lower.includes("generate password") || lower.includes("create password")) {
+    if (lower.includes("generate password") || lower.includes("create password") || lower.includes("make password") || lower.includes("suggest password") || lower.includes("need a password")) {
         return generatePassword();
     }
 
     // Daily Planner
-    if (lower.includes("plan day") || lower.includes("add plan")) {
-        const planMatch = message.match(/(?:plan day|add plan):?\s*(.+)/i);
+    if (lower.includes("plan day") || lower.includes("add plan") || lower.includes("create plan") || lower.includes("new plan") || lower.includes("daily schedule")) {
+        const planMatch = message.match(/(?:plan day|add plan|create plan|new plan|daily schedule):?\s*(.+)/i);
         if (planMatch && planMatch[1]) {
             return addPlanItem(planMatch[1].trim());
         } else {
             return "❌ Please specify plan item. Example: 'Plan day: Study 2 hours'";
         }
     }
-    if (lower.includes("show plan") || lower.includes("view plan") || lower.includes("daily plan")) {
+    if (lower.includes("show plan") || lower.includes("view plan") || lower.includes("daily plan") || lower.includes("my plan") || lower.includes("what's my plan")) {
         return showDailyPlan();
     }
 
     // Health Tracker
-    if (lower.includes("log water") || lower.includes("log health")) {
-        const healthMatch = message.match(/(?:log water|log health):?\s*(.+)/i);
+    if (lower.includes("log water") || lower.includes("log health") || lower.includes("add health log") || lower.includes("track health") || lower.includes("record health")) {
+        const healthMatch = message.match(/(?:log water|log health|add health log|track health|record health):?\s*(.+)/i);
         if (healthMatch && healthMatch[1]) {
             return logHealth("Water", healthMatch[1].trim());
         } else {
             return "❌ Please specify amount. Example: 'Log water: 500ml'";
         }
     }
-    if (lower.includes("show health") || lower.includes("view health") || lower.includes("health log")) {
+    if (lower.includes("show health") || lower.includes("view health") || lower.includes("health log") || lower.includes("my health")) {
         return showHealthLogs();
     }
 
     // Flashcard System
-    if (lower.includes("add flashcard")) {
-        const flashcardMatch = message.match(/add flashcard:?\s*(.+?)\s*[-–—]\s*(.+)/i);
+    if (lower.includes("add flashcard") || lower.includes("create flashcard") || lower.includes("new flashcard") || lower.includes("make flashcard")) {
+        const flashcardMatch = message.match(/(?:add flashcard|create flashcard|new flashcard|make flashcard):?\s*(.+?)\s*[-–—]\s*(.+)/i);
         if (flashcardMatch && flashcardMatch[1] && flashcardMatch[2]) {
             return addFlashcard(flashcardMatch[1].trim(), flashcardMatch[2].trim());
         } else {
             return "❌ Please specify question and answer. Example: 'Add flashcard: Capital of India - New Delhi'";
         }
     }
-    if (lower.includes("show flashcards") || lower.includes("view flashcards") || lower.includes("my flashcards")) {
+    if (lower.includes("show flashcards") || lower.includes("view flashcards") || lower.includes("my flashcards") || lower.includes("list flashcards") || lower.includes("flashcard list")) {
         return showFlashcards();
     }
 
-    // Quiz (Updated to handle more questions and flexible answers)
+    // Quiz
     const quizTriggers = [
         "let's play quiz", "play quiz", "start quiz", "quiz time", "quiz",
-        "i want to play quiz", "take a quiz", "give me a quiz"
+        "i want to play quiz", "take a quiz", "give me a quiz", "quiz me", "start a quiz"
     ];
     if (quizTriggers.some(trigger => lower === trigger)) {
         quizActive = true;
         quizScore = 0;
         quizIndex = 0;
-        // Shuffle and select up to 5 questions (or all if less)
-        quizQuestions = [...gkQuiz].sort(() => 0.5 - Math.random()).slice(0, Math.min(5, gkQuiz.length));
-        addMessage("🎯 Quiz Started! Get ready for some questions. Let's begin!", false);
+        quizQuestions = shuffleArray([...gkQuiz]).slice(0, 10); // Use shuffleArray here
+        addMessage("🎯 Quiz Started! 10 questions, 10 seconds each. Let's begin!", false);
         showNextQuestion();
         return;
     }
-    if (["exit quiz", "stop quiz", "quit quiz", "end quiz", "leave quiz", "Exit"].includes(lower)) {
+    if (["exit quiz", "stop quiz", "quit quiz", "end quiz", "leave quiz", "Exit", "stop game", "end game"].some(trigger => lower.includes(trigger))) {
         if (quizActive) {
             quizActive = false;
             clearQuizTimer();
@@ -1429,24 +1494,28 @@ Type 'confirm' to save or 'cancel' to discard.`;
         }
     }
     if (quizActive) {
-        const q = quizQuestions[quizIndex];
-        const ans = message.trim().toUpperCase();
-        const correct = q.answer;
+        const userAnswer = message.trim().toLowerCase();
+        const currentQuestion = quizQuestions[quizIndex];
+        const correctAnswerLetter = currentQuestion.answer.toLowerCase();
 
         clearQuizTimer();
 
-        // Check if the answer is correct (letter, number, or text)
-        const isCorrect =
-            ans === correct || // Exact letter match
-            ans === correct.split(')')[1].trim().toUpperCase() || // Text match (e.g., "NEW DELHI")
-            ans === (correct.charCodeAt(0) - 64).toString(); // Number match (1, 2, 3, 4)
+        let isCorrect = false;
+        const correctOption = currentQuestion.options.find(o => o.toLowerCase().startsWith(correctAnswerLetter + ')'));
+        if (correctOption) {
+            const correctAnswerText = correctOption.substring(correctOption.indexOf(')') + 1).trim().toLowerCase();
+            if (userAnswer === correctAnswerLetter || userAnswer === `option ${correctAnswerLetter}` || userAnswer === correctAnswerText || userAnswer === correctAnswerText.replace(/\s/g, '')) {
+                isCorrect = true;
+            }
+        }
 
         if (isCorrect) {
             quizScore++;
             addMessage("✅ Correct!", false);
             playCorrectSound();
         } else {
-            addMessage(`❌ Wrong! Correct answer was: ${correct} (${q.options.find(o => o.startsWith(correct))?.split(')')[1]?.trim()})`, false);
+            const correctOptionText = currentQuestion.options.find(o => o.startsWith(currentQuestion.answer)).substring(3);
+            addMessage(`❌ Wrong! The correct answer was: ${currentQuestion.answer}) ${correctOptionText}`, false);
             playWrongSound();
         }
         quizIndex++;
@@ -1461,7 +1530,7 @@ Type 'confirm' to save or 'cancel' to discard.`;
     // Rock Paper Scissors
     const rpsTriggers = [
         "rps", "rock paper scissors", "play rps", "lets play game", "game",
-        "play game", "lets play rps", "play rock paper scissors"
+        "play game", "lets play rps", "play rock paper scissors", "rock paper scissor game", "i am doing great let's play rock paper scissor"
     ];
     if (rpsTriggers.some(trigger => lower === trigger)) {
         rpsGameActive = true;
@@ -1477,12 +1546,25 @@ Type 'confirm' to save or 'cancel' to discard.`;
             rpsBotScore = 0;
             return finalScore;
         }
-        const userChoice = lower.trim();
+
+        let userChoice = '';
+        let remainingText = '';
         const choices = ["rock", "paper", "scissors"];
-        const botChoice = choices[Math.floor(Math.random() * 3)];
-        if (!choices.includes(userChoice)) {
+
+        // Attempt to extract RPS choice and any remaining commands
+        const rpsMatch = lower.match(/^(rock|paper|scissors)(?:\s+(?:and|then|also|&)\s*(.*))?$/i);
+
+        if (rpsMatch) {
+            userChoice = rpsMatch[1].toLowerCase();
+            remainingText = rpsMatch[2] || '';
+        } else if (choices.includes(lower)) {
+            userChoice = lower;
+        } else {
+            // If it's not a valid RPS move and no other commands were parsed, it's an invalid input.
             return "❌ Invalid choice! Choose: Rock, Paper, or Scissors. Type 'exit' to quit.";
         }
+
+        const botChoice = choices[Math.floor(Math.random() * 3)];
         let result;
         if (userChoice === botChoice) {
             result = "It's a tie!";
@@ -1497,7 +1579,22 @@ Type 'confirm' to save or 'cancel' to discard.`;
             rpsBotScore++;
             result = "You lose! 😢";
         }
-        return `You: ${userChoice.toUpperCase()}<br>Ghost: ${botChoice.toUpperCase()}<br><br>👉 ${result}<br>Score: You ${rpsUserScore} - Ghost ${rpsBotScore}<br>Play again: Choose Rock, Paper, or Scissors. Type 'exit' to quit.`;
+
+        const rpsResponse = `You: ${userChoice.toUpperCase()}<br>Ghost: ${botChoice.toUpperCase()}<br><br>👉 ${result}<br>Score: You ${rpsUserScore} - Ghost ${rpsBotScore}<br>Play again: Choose Rock, Paper, or Scissors. Type 'exit' to quit.`;
+
+        if (remainingText.trim()) {
+            const additionalCommands = remainingText.split(/\s+(?:and|then|also|&)\s+/i).filter(c => c.trim() !== '');
+            if (additionalCommands.length > 0) {
+                // Add the RPS response first, then the additional commands
+                commandQueue.unshift(...additionalCommands);
+                commandQueue.unshift(rpsResponse);
+                if (!isProcessingQueue) {
+                    processCommandQueue();
+                }
+                return; // Return early, let the queue handle the output
+            }
+        }
+        return rpsResponse;
     }
 
     // Daily Conversations
@@ -1506,7 +1603,9 @@ Type 'confirm' to save or 'cancel' to discard.`;
             "Hi there! I'm Ghost, your AI assistant. How can I help you today?",
             "Hello! I'm Ghost. What can I do for you?",
             "Hey! I'm Ghost. How can I assist you?",
-            "Greetings! I'm Ghost. What would you like to know?"
+            "Greetings! I'm Ghost. What would you like to know?",
+            "Namaste! I'm Ghost. How can I be of service?",
+            "Hey there! I'm Ghost. What's on your mind?"
         ];
         return greetings[Math.floor(Math.random() * greetings.length)];
     }
@@ -1515,12 +1614,14 @@ Type 'confirm' to save or 'cancel' to discard.`;
             "I'm doing great, thanks! How about you?",
             "I'm fine, thank you! How are you doing?",
             "I'm good! Hope you're having a great day!",
-            "Doing well! Thanks for asking. How are you?"
+            "Doing well! Thanks for asking. How are you?",
+            "I'm just a program, but I'm here and ready to help! How are you?",
+            "I'm doing well, thank you for asking! What can I do for you today?"
         ];
         return responses[Math.floor(Math.random() * responses.length)];
     }
     if (dailyConversations.yourName.some(q => lower.includes(q))) {
-        return "I'm Ghost — your ai companion! ";
+        return "I'm Ghost — your ai companion!";
     }
     if (dailyConversations.owner.some(q => lower.includes(q))) {
         return "I'm Ghost — Made By Arpit Pandey!";
@@ -1557,11 +1658,15 @@ Type 'confirm' to save or 'cancel' to discard.`;
     }
 
     // Reminders
-    if (lower.includes("remind me") || lower.includes("set reminder") || lower.includes("alert me in") || lower.includes("notify me") || lower.includes("add reminder")) {
+    if (lower.includes("remind me") || lower.includes("set reminder") || lower.includes("alert me in") || lower.includes("notify me") || lower.includes("add reminder") || lower.includes("create reminder") || lower.includes("schedule reminder") || lower.includes("remind me about") || lower.includes("reminder for")) {
         const remindMatch1 = lower.match(/remind me to (.+?) in (\d+) (seconds?|minutes?|hours?)/);
         const remindMatch2 = lower.match(/set a reminder for (\d+) (seconds?|minutes?|hours?)(?: to (.+?))?$/);
         const remindMatch3 = lower.match(/in (\d+) (seconds?|minutes?) remind me to (.+?)(?:$|\.)/);
-        if (remindMatch1 || remindMatch2 || remindMatch3) {
+        const remindMatch4 = lower.match(/reminder for (.+?) in (\d+) (seconds?|minutes?|hours?)/);
+        const remindMatch5 = lower.match(/create reminder (.+?) for (\d+) (seconds?|minutes?|hours?)/);
+        const remindMatch6 = lower.match(/schedule reminder (.+?) in (\d+) (seconds?|minutes?|hours?)/);
+
+        if (remindMatch1 || remindMatch2 || remindMatch3 || remindMatch4 || remindMatch5 || remindMatch6) {
             let task, timeValue, unit;
             if (remindMatch1) {
                 [_, task, timeValue, unit] = remindMatch1;
@@ -1569,11 +1674,17 @@ Type 'confirm' to save or 'cancel' to discard.`;
                 [_, timeValue, unit, task] = remindMatch2;
             } else if (remindMatch3) {
                 [_, timeValue, unit, task] = remindMatch3;
+            } else if (remindMatch4) {
+                [_, task, timeValue, unit] = remindMatch4;
+            } else if (remindMatch5) {
+                [_, task, timeValue, unit] = remindMatch5;
+            } else if (remindMatch6) {
+                [_, task, timeValue, unit] = remindMatch6;
             }
             task = task?.trim() || null;
             if (!task) {
                 awaitingReminderInput = true;
-                return "🔔 For What you'd like to set a reminder ?";
+                return "🔔 What would you like to set a reminder for?";
             }
             const value = parseInt(timeValue);
             let ms;
@@ -1598,6 +1709,12 @@ Type 'confirm' to save or 'cancel' to discard.`;
         return "🔔 What is the reminder you'd like to set?";
     }
 
+    if (lower.includes("clear reminders") || lower.includes("cancel reminders") || lower.includes("remove reminders") || lower.includes("delete reminders") || lower.includes("stop all reminders")) {
+        activeReminders.forEach(timerId => clearTimeout(timerId));
+        activeReminders = [];
+        return "🗑️ All active reminders have been cleared.";
+    }
+
     // To-Do List (Expanded triggers)
     if (lower.startsWith("add:") ||
         lower.includes("add task") ||
@@ -1605,17 +1722,20 @@ Type 'confirm' to save or 'cancel' to discard.`;
         lower.includes("add new task") ||
         lower.includes("create new task") ||
         lower.includes("make a task") ||
-        lower.includes("add a task")) {
-        const taskMatch = message.match(/(?:add task|create task|add new task|create new task|make a task|add a task):?\s*(.+)/i) ||
+        lower.includes("add a task") ||
+        lower.includes("new todo") ||
+        lower.includes("create todo") ||
+        lower.includes("add item to list")) {
+        const taskMatch = message.match(/(?:add task|create task|add new task|create new task|make a task|add a task|new todo|create todo|add item to list):?\s*(.+)/i) ||
             message.match(/add:(.+)/i);
         let task = taskMatch ? taskMatch[1].trim() :
-            message.replace(/add task|create task|add new task|create new task|make a task|add a task/gi, "").trim();
-        if (!task || lower.trim() === "add task" || lower.trim() === "add a task") {
+            message.replace(/add task|create task|add new task|create new task|make a task|add a task|new todo|create todo|add item to list/gi, "").trim();
+        if (!task || lower.trim() === "add task" || lower.trim() === "add a task" || lower.trim() === "new todo") {
             awaitingTaskInput = true;
             return "📝 What task should I add?";
         }
         const tasks = getTasks();
-        tasks.push({ text: task, time: new Date().toLocaleString() });
+        tasks.push({ text: task, time: new Date().toLocaleString(), completed: false });
         saveTasks(tasks);
         return `✅ Task added: "${task}"`;
     }
@@ -1624,7 +1744,10 @@ Type 'confirm' to save or 'cancel' to discard.`;
         lower.includes("todo") ||
         lower.includes("list tasks") ||
         lower.includes("view tasks") ||
-        lower.includes("tasks")) { // <-- ADDED: 'tasks' trigger
+        lower.includes("tasks") ||
+        lower.includes("what are my todos") ||
+        lower.includes("display tasks") ||
+        lower.includes("check my list")) {
         const tasks = getTasks();
         if (tasks.length === 0) return "📋 No tasks yet. Use 'Add: Task name' to add one.";
         let table = `
@@ -1633,19 +1756,38 @@ Type 'confirm' to save or 'cancel' to discard.`;
                     <th style="text-align: left;">#</th>
                     <th style="text-align: left;">Task</th>
                     <th style="text-align: left;">Added On</th>
+                    <th style="text-align: left;">Status</th>
                 </tr>
         `;
         tasks.forEach((task, i) => {
+            const status = task.completed ? "✅ Done" : "⏳ Pending";
             table += `
                 <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
                     <td>${i + 1}</td>
                     <td>${task.text}</td>
                     <td>${task.time}</td>
+                    <td>${status}</td>
                 </tr>
             `;
         });
         table += `</table>`;
         return table;
+    }
+
+    if (lower.startsWith("complete task") || lower.startsWith("finish task") || lower.startsWith("mark task as complete") || lower.includes("task done") || lower.includes("finish todo")) {
+        const match = lower.match(/(?:complete|finish|mark) task(?: as complete)?\s*(\d+)/);
+        if (match && match[1]) {
+            return completeTask(match[1]);
+        }
+        return "❌ Please provide a task ID. Example: 'complete task 1'";
+    }
+
+    if (lower.startsWith("remove task") || lower.startsWith("delete task") || lower.includes("erase task") || lower.includes("delete todo") || lower.includes("remove todo")) {
+        const match = lower.match(/(?:remove|delete) task\s*(\d+)/);
+        if (match && match[1]) {
+            return removeTask(match[1]);
+        }
+        return "❌ Please provide a task ID. Example: 'remove task 1'";
     }
 
     // Notes
@@ -1665,12 +1807,46 @@ Type 'confirm' to save or 'cancel' to discard.`;
         lower.includes("saved notes") ||
         lower.includes("view notes") ||
         lower.includes("show notes")) {
-        const notes = JSON.parse(localStorage.getItem("ghostNotes") || "[]");
+        const notes = getNotes();
         if (notes.length === 0) return "You have no notes yet. Use 'note: your text' to save one!";
-        return "📒 Your notes:<br>" + notes.map(n => `• "${n.text}" <small>(${n.time})</small>`).join("<br>");
+        let table = `
+            <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
+                <tr style="background: #2d2d2d; color: white;">
+                    <th style="text-align: left;">ID</th>
+                    <th style="text-align: left;">Note</th>
+                    <th style="text-align: left;">Added On</th>
+                </tr>
+        `;
+        notes.forEach((note, i) => {
+            table += `
+                <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
+                    <td>${i + 1}</td>
+                    <td>${note.text}</td>
+                    <td>${note.time}</td>
+                </tr>
+            `;
+        });
+        table += `</table>`;
+        return table;
     }
 
-    // BMI Calculator
+    if (lower.startsWith("delete note") || lower.startsWith("remove note")) {
+        const match = lower.match(/(?:delete|remove) note\s*(\d+)/);
+        if (match && match[1]) {
+            return deleteNote(match[1]);
+        }
+        return "❌ Please provide a note ID. Example: 'delete note 1'";
+    }
+
+    if (lower.startsWith("edit note") || lower.startsWith("update note")) {
+        const match = lower.match(/(?:edit|update) note\s*(\d+):\s*(.+)/i);
+        if (match && match[1] && match[2]) {
+            return editNote(match[1], match[2].trim());
+        }
+        return "❌ Please provide a note ID and new text. Example: 'edit note 1: Buy groceries'";
+    }
+
+    // BMI
     if (lower.includes("weight") && lower.includes("height") || lower.includes("bmi") || lower.includes("body mass index")) {
         const weightMatch = lower.match(/weight.*?(\d+(\.\d+)?)/i);
         const heightMatch = lower.match(/height.*?(\d+(\.\d+)?)/i);
@@ -1684,7 +1860,7 @@ Type 'confirm' to save or 'cancel' to discard.`;
         }
     }
 
-    // YouTube Music
+    // YouTube
     if (lower.includes("play") && (lower.includes("youtube") || lower.includes("song") || lower.includes("music") || lower.includes("listen to"))) {
         const queryMatch = message.match(/play (.+?) on youtube/i);
         const songName = queryMatch ? queryMatch[1] : message.replace(/play|song|music|listen to|on youtube/gi, "").trim();
@@ -1694,56 +1870,51 @@ Type 'confirm' to save or 'cancel' to discard.`;
         }
     }
 
-    // Currency Converter (Enhanced)
-    const currencyTriggers = ["usd", "inr", "eur", "gbp", "jpy", "cad", "aud", "chf", "cny", "sek", "nzd", "mxn", "sgd", "hkd", "nok", "krw", "try", "rub", "brl", "zar", "rs", "$", "€", "£", "¥"];
-    if (currencyTriggers.some(trigger => lower.includes(trigger))) {
-        const currencyRegex = /(\d+(?:\.\d+)?)\s*([a-zA-Z$€£¥]{3,4}|rs)\s*(?:in|to)\s*([a-zA-Z$€£¥]{3,4}|rs)/i;
-        const match = message.match(currencyRegex);
-        if (match) {
-            const amount = parseFloat(match[1]);
-            let fromCurrency = match[2].toLowerCase();
-            let toCurrency = match[3].toLowerCase();
+    // Currency Converter
+    if (lower.includes("convert") || lower.includes("exchange") || lower.includes("currency")) {
+        const currencyMatch = lower.match(/convert\s*(\d+(?:\.\d+)?)\s*(?:([a-zA-Z$€₹]+)|(?:(usd|inr|eur|dollar|rupees|euro)))\s*(?:to|in)\s*(?:([a-zA-Z$€₹]+)|(?:(usd|inr|eur|dollar|rupees|euro)))/i) ||
+            lower.match(/(\d+(?:\.\d+)?)\s*(?:([a-zA-Z$€₹]+)|(?:(usd|inr|eur|dollar|rupees|euro)))\s*(?:in|to)\s*(?:([a-zA-Z$€₹]+)|(?:(usd|inr|eur|dollar|rupees|euro)))/i);
+        if (currencyMatch) {
+            const amount = parseFloat(currencyMatch[1]);
+            let from = (currencyMatch[2] || currencyMatch[3]).toLowerCase();
+            let to = (currencyMatch[4] || currencyMatch[5]).toLowerCase();
 
-            // Symbol to code mapping
-            const symbolMap = {
-                '$': 'usd', '€': 'eur', '£': 'gbp', '¥': 'jpy', 'rs': 'inr'
-            };
+            from = from.replace('$', 'usd').replace('rs', 'inr').replace('rupees', 'inr').replace('dollar', 'usd').replace('€', 'eur');
+            to = to.replace('$', 'usd').replace('rs', 'inr').replace('rupees', 'inr').replace('dollar', 'usd').replace('€', 'eur');
 
-            fromCurrency = symbolMap[fromCurrency] || fromCurrency;
-            toCurrency = symbolMap[toCurrency] || toCurrency;
+            const rates = { usd: 83.0, inr: 1.0, eur: 90.0 }; // Fixed rates
 
-            // Simple hardcoded exchange rates (for demonstration, replace with API call)
-            const exchangeRates = {
-                'usd': 1, 'inr': 83, 'eur': 0.93, 'gbp': 0.79, 'jpy': 151.5
-            };
-
-            if (exchangeRates[fromCurrency] && exchangeRates[toCurrency]) {
-                const rate = exchangeRates[toCurrency] / exchangeRates[fromCurrency];
-                const convertedAmount = (amount * rate).toFixed(2);
-                return `💱 ${amount} ${fromCurrency.toUpperCase()} = ${convertedAmount} ${toCurrency.toUpperCase()}`;
+            if (rates[from] && rates[to]) {
+                const result = (amount / rates[from]) * rates[to];
+                /* The above code is a JavaScript function that takes in three parameters: `amount`,
+                `from`, and `to`. It then calculates an approximate conversion from one currency
+                (`from`) to another currency (`to`) based on the given `amount`. The result is
+                formatted as a string that includes the original amount, the original currency
+                (converted to uppercase), the converted amount (rounded to two decimal places), and
+                the target currency (converted to uppercase). */
+                return `💰 ${amount} ${from.toUpperCase()} is approximately ${result.toFixed(2)} ${to.toUpperCase()}.`;
             } else {
-                return "❌ Sorry, I don't support that currency conversion right now.";
+                return "❌ I can only convert between USD, INR, and EUR for now.";
             }
         }
     }
 
-    // QR Code Generator (Placeholder - needs implementation)
-    if (lower.includes("generate qr") || lower.includes("qr code")) {
-        const qrMatch = message.match(/generate qr.*?['"](.+?)['"]/i);
-        if (qrMatch && qrMatch[1]) {
-            // Placeholder for QR generation logic
-            return `🖼️ Generating QR code for: "${qrMatch[1]}". (QR generation logic needs to be implemented)`;
-        } else {
-            return "❌ Please specify text for the QR code. Example: 'Generate QR for Hello World'";
+    // QR Code Generator
+    if (lower.startsWith("generate qr") || lower.startsWith("qr code for") || lower.includes("make qr code") || lower.includes("create qr code") || lower.includes("show qr for") || lower.includes("qr me")) {
+        const textMatch = lower.match(/(?:generate qr for|qr code for|make qr code for|create qr code for|show qr for|qr me)\s*(.+)/i);
+        if (textMatch && textMatch[1]) {
+            const data = encodeURIComponent(textMatch[1].trim());
+            return `Here is the QR code for "${textMatch[1].trim()}":<br><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${data}" alt="QR Code">`;
         }
+        return "❌ Please specify what the QR code should contain. Example: 'Generate QR for https://google.com'";
     }
 
-    // Default response (improved)
+    // Default response
     const defaultResponses = [
-        "I'm still learning, but I'll get there soon! Try asking 'what can you do' to see my features.",
-        "I can help you with many things! Ask me about math, time, tasks, or just chat!",
-        "I'm your AI assistant! What would you like to know?",
-        "I'm ready to help! Try asking me to calculate something or set a reminder."
+        "I'm still learning this feature. I'll be able to do this soon. Please try asking 'help' to see what I can do!",
+        "That's a bit beyond my current capabilities, but I'm under active development and constantly learning new things. Try asking 'help' for a list of commands.",
+        "I'm not sure how to respond to that yet. I'm constantly being updated with new abilities, so stay tuned! You can ask 'help' to see what I can do.",
+        "I'm a developing AI and don't have that feature implemented yet. Feel free to ask for 'help' to see my current functionalities."
     ];
     return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
 }
@@ -1755,20 +1926,39 @@ function sendMessage() {
 
     addMessage(message, true);
     userInput.value = "";
-    showTyping();
 
-    // Check for multi-command
-    if (processMultiCommand(message)) {
-        return; // Multi-command processing will handle responses
-    }
+    const inInteractiveMode = quizActive || rpsGameActive || awaitingTaskInput || awaitingReminderInput || awaitingContactName || awaitingExpenseDescription || awaitingContactConfirmation || awaitingExpenseConfirmation;
+    const commands = message.split(/\s+(?:and|then|also|&)\s+/i).filter(c => c.trim() !== '');
 
-    setTimeout(() => {
-        const response = getResponse(message);
+    if (commands.length > 1 && !inInteractiveMode) {
+        commandQueue.push(...commands);
+        if (!isProcessingQueue) {
+            processCommandQueue();
+        }
+    } else if (rpsGameActive && commands.length > 0) {
+        // If RPS is active, process the first command as RPS input, then queue the rest
+        const rpsInput = commands.shift();
+        const response = getResponse(rpsInput); // Process RPS input immediately
         if (response !== undefined) {
             addMessage(response, false);
             safeSpeak(response);
         }
-    }, 300 + Math.random() * 200);
+        if (commands.length > 0) {
+            commandQueue.push(...commands); // Add remaining commands to queue
+            if (!isProcessingQueue) {
+                processCommandQueue();
+            }
+        }
+    } else {
+        showTyping();
+        setTimeout(() => {
+            const response = getResponse(message);
+            if (response !== undefined) {
+                addMessage(response, false);
+                safeSpeak(response);
+            }
+        }, 300 + Math.random() * 200);
+    }
 }
 
 // Voice toggle variables and functions
@@ -1858,13 +2048,34 @@ function playOnYouTube(songName) {
     window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(songName)}`, '_blank');
 }
 
-// Placeholder for playCorrectSound and playWrongSound
-function playCorrectSound() {
-    // Play correct answer sound
+// Function to play a sound (helper)
+function playSound(frequency, type, duration = 150, volume = 0.5) {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+    gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+
+    oscillator.start();
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration / 1000);
+    oscillator.stop(audioContext.currentTime + duration / 1000);
 }
 
+// Function to play correct answer sound
+function playCorrectSound() {
+    playSound(700, 'sine', 100);
+    playSound(900, 'sine', 150, 0.6);
+}
+
+// Function to play wrong answer sound
 function playWrongSound() {
-    // Play wrong answer sound
+    playSound(200, 'triangle', 200, 0.7);
+    playSound(100, 'triangle', 250, 0.8);
 }
 
 // Function to get tasks from localStorage
@@ -1874,8 +2085,85 @@ function getTasks() {
 
 // Function to save tasks to localStorage
 function saveTasks(tasks) {
-    localStorage.setItem("ghostTasks", JSON.stringify(tasks));
+    try {
+        localStorage.setItem("ghostTasks", JSON.stringify(tasks));
+    } catch (e) {
+        console.error("Error saving tasks to localStorage:", e);
+        addMessage("❌ Error saving tasks.", false);
+    }
+}
+
+// Function to complete a task
+function completeTask(taskId) {
+    const tasks = getTasks();
+    const taskIndex = parseInt(taskId) - 1;
+    if (taskIndex >= 0 && taskIndex < tasks.length) {
+        if (tasks[taskIndex].completed) {
+            return `🤔 Task "${tasks[taskIndex].text}" is already marked as completed.`;
+        }
+        tasks[taskIndex].completed = true;
+        saveTasks(tasks);
+        return `✅ Task "${tasks[taskIndex].text}" marked as completed.`;
+    }
+    return "❌ Invalid task ID. Use 'show tasks' to see the list with IDs.";
+}
+
+// Function to remove a task
+function removeTask(taskId) {
+    const tasks = getTasks();
+    const taskIndex = parseInt(taskId) - 1;
+    if (taskIndex >= 0 && taskIndex < tasks.length) {
+        const removedTask = tasks.splice(taskIndex, 1);
+        saveTasks(tasks);
+        return `🗑️ Task "${removedTask[0].text}" has been removed.`;
+    }
+    return "❌ Invalid task ID. Use 'show tasks' to see the list with IDs.";
 }
 
 // Active reminders array
 let activeReminders = [];
+
+// Function to get notes from localStorage
+function getNotes() {
+    try {
+        return JSON.parse(localStorage.getItem("ghostNotes") || "[]");
+    } catch (e) {
+        console.error("Error loading notes from localStorage:", e);
+        return [];
+    }
+}
+
+// Function to save notes to localStorage
+function saveNotes(notes) {
+    try {
+        localStorage.setItem("ghostNotes", JSON.stringify(notes));
+    } catch (e) {
+        console.error("Error saving notes to localStorage:", e);
+        addMessage("❌ Error saving notes.", false);
+    }
+}
+
+// Function to delete a note
+function deleteNote(noteId) {
+    const notes = getNotes();
+    const noteIndex = parseInt(noteId) - 1;
+    if (noteIndex >= 0 && noteIndex < notes.length) {
+        const deletedNote = notes.splice(noteIndex, 1);
+        saveNotes(notes);
+        return `🗑️ Note "${deletedNote[0].text}" has been deleted.`;
+    }
+    return "❌ Invalid note ID. Use 'show notes' to see the list with IDs.";
+}
+
+// Function to edit a note
+function editNote(noteId, newText) {
+    const notes = getNotes();
+    const noteIndex = parseInt(noteId) - 1;
+    if (noteIndex >= 0 && noteIndex < notes.length) {
+        notes[noteIndex].text = newText;
+        notes[noteIndex].time = new Date().toLocaleString();
+        saveNotes(notes);
+        return `📝 Note ${noteId} updated to: "${newText}"`;
+    }
+    return "❌ Invalid note ID. Use 'show notes' to see the list with IDs.";
+}
