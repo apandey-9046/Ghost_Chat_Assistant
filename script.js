@@ -612,7 +612,7 @@ function addExpense(expenseData) {
     };
     expenses.push(expense);
     saveExpenses(expenses);
-    const { amount, description } = expenseData;
+    const { amount, description, category, mode } = expenseData;
     const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
     return `✅ Expense added: ₹${amount} for ${description} (${category}, ${mode})<br>📊 Total spent: ₹${total.toFixed(2)}`;
 }
