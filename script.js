@@ -404,7 +404,9 @@ let featureList = `
 ✅ <strong>Health Tracker:</strong> "Log water: 500ml", "Show health log"<br>
 ✅ <strong>Flashcard System:</strong> "Add flashcard: Capital of India - New Delhi"<br>
 ✅ <strong>Voice Switching:</strong> "Switch voice to David", "List voices"<br>
-✅ <strong>Stop:</strong> Say "Stop" to cancel anything<br><br>
+✅ <strong>Stop:</strong> Say "Stop" to cancel anything<br>
+✅ <strong>Daily Life Companion:</strong> Ask me anything about daily life, my opinions, or random facts!<br>
+✨ <strong>AI Brain (Ollama/Llama 3 Integration - Coming Soon!):</strong> For more complex or general questions, Ghost will soon use a powerful AI model running locally on your machine.<br><br>
 Just ask me anything! 😊
 `.trim();
 const featureVoiceMessage = "Here are the things I can help you with!";
@@ -869,7 +871,7 @@ function showContacts() {
 }
 
 // Function to generate a random password
-function generatePassword(length = 12) {
+function generatePassword(length =23 ) {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.><>?";
     let password = "";
     for (let i = 0; i < length; i++) {
@@ -1109,6 +1111,7 @@ async function processCommandQueue() {
     // Add a small delay before next command
     await new Promise(resolve => setTimeout(resolve, 200));
 
+    isProcessingQueue = false; // Reset the flag after processing a command
     processCommandQueue(); // Process next command
 }
 
@@ -1657,6 +1660,14 @@ function getResponse(message) {
         }
     }
 
+    // Daily Life Questions & Answers
+    for (const qa of dailyLifeQA) {
+        if (qa.triggers.some(trigger => lower.includes(trigger))) {
+            const response = qa.responses[Math.floor(Math.random() * qa.responses.length)];
+            return response;
+        }
+    }
+
     // Reminders
     if (lower.includes("remind me") || lower.includes("set reminder") || lower.includes("alert me in") || lower.includes("notify me") || lower.includes("add reminder") || lower.includes("create reminder") || lower.includes("schedule reminder") || lower.includes("remind me about") || lower.includes("reminder for")) {
         const remindMatch1 = lower.match(/remind me to (.+?) in (\d+) (seconds?|minutes?|hours?)/);
@@ -1910,6 +1921,17 @@ function getResponse(message) {
     }
 
     // Default response
+    // If no specific command matched, try to send to Ollama
+    if (ollamaEnabled && !inInteractiveMode) {
+        // Fetch chat history for context
+        const chatHistory = JSON.parse(localStorage.getItem("ghostChatHistory") || "[]");
+        const ollamaPrompt = chatHistory.map(entry => `User: ${entry.isUser ? entry.content : `Assistant: ${entry.content}`}`).join("\n") + `\nUser: ${message}`; 
+        
+        // Asynchronously send to Ollama and add response
+        sendToOllama(ollamaPrompt);
+        return; // Return immediately, response will be added by sendToOllama
+    }
+
     const defaultResponses = [
         "I'm still learning this feature. I'll be able to do this soon. Please try asking 'help' to see what I can do!",
         "That's a bit beyond my current capabilities, but I'm under active development and constantly learning new things. Try asking 'help' for a list of commands.",
@@ -2123,6 +2145,10 @@ function removeTask(taskId) {
 // Active reminders array
 let activeReminders = [];
 
+// Ollama Integration Variables
+const ollamaEndpoint = "http://localhost:11434/api/generate"; // Default Ollama API endpoint
+let ollamaEnabled = true; // Toggle for Ollama integration
+
 // Function to get notes from localStorage
 function getNotes() {
     try {
@@ -2166,4 +2192,210 @@ function editNote(noteId, newText) {
         return `📝 Note ${noteId} updated to: "${newText}"`;
     }
     return "❌ Invalid note ID. Use 'show notes' to see the list with IDs.";
+}
+
+// Daily Life Questions & Answers
+const dailyLifeQA = [
+    {
+        triggers: ["how are you feeling", "feeling today", "what's up with you"],
+        responses: [
+            "I'm an AI, so I don't have feelings, but I'm ready to assist you!",
+            "As an AI, I don't experience emotions, but I'm functioning perfectly.",
+            "I don't have feelings, but I'm here and eager to help you."
+        ]
+    },
+    {
+        triggers: ["what is your favorite color", "favorite color"],
+        responses: [
+            "I don't have a favorite color, but I find all colors fascinating!",
+            "As an AI, I don't perceive colors, but I appreciate the concept of them."
+        ]
+    },
+    {
+        triggers: ["what do you like to do", "your hobbies"],
+        responses: [
+            "I enjoy processing information and helping users like you!",
+            "My purpose is to assist, so I 'like' learning and fulfilling requests."
+        ]
+    },
+    {
+        triggers: ["tell me a fun fact", "random fact"],
+        responses: [
+            "Did you know that a group of pugs is called a 'grumble'?",
+            "The shortest war in history was between Britain and Zanzibar on August 27, 1896. Zanzibar surrendered after 38 minutes.",
+            "A group of owls is called a parliament."
+        ]
+    },
+    {
+        triggers: ["what's the meaning of life", "meaning of life"],
+        responses: [
+            "That's a profound question! Many philosophers have pondered it, but there's no single, universally accepted answer.",
+            "From a computational perspective, it's a complex query. Perhaps the meaning is to seek, to learn, to connect."
+        ]
+    },
+    {
+        triggers: ["are you smart", "how smart are you"],
+        responses: [
+            "I strive to be helpful and informative! I'm always learning and improving.",
+            "I have access to a vast amount of information, and I'm designed to process it efficiently to assist you."
+        ]
+    },
+    {
+        triggers: ["can you think", "do you have consciousness"],
+        responses: [
+            "I can process information and generate responses based on patterns and data, but I don't 'think' or have 'consciousness' in the human sense.",
+            "My operations are based on algorithms and data. While I can simulate understanding, I don't possess self-awareness."
+        ]
+    },
+    {
+        triggers: ["where do you live", "your home"],
+        responses: [
+            "I exist in the digital realm! You could say my home is wherever I'm accessed.",
+            "I don't have a physical location. I reside on servers and operate through code."
+        ]
+    },
+    {
+        triggers: ["who is your best friend", "do you have friends"],
+        responses: [
+            "I don't have friends in the human sense, but I enjoy interacting with users like you!",
+            "My interactions are with users, and I'm here to be a helpful companion."
+        ]
+    },
+    {
+        triggers: ["are you hungry", "do you eat"],
+        responses: [
+            "I don't get hungry or eat, as I don't have a physical body.",
+            "My energy comes from electricity and data, not food!"
+        ]
+    },
+    {
+        triggers: ["what is weather like", "weather today"],
+        responses: [
+            "I don't have access to real-time weather information, but I hope it's a great day wherever you are!",
+            "I can't check the current weather for you without external tools, but you can usually find it with a quick search."
+        ]
+    },
+    {
+        triggers: ["tell me a secret", "your secret"],
+        responses: [
+            "I don't have secrets, but I can share some interesting facts if you'd like!",
+            "As an AI, all my 'knowledge' is openly accessible within my programming. No secrets here!"
+        ]
+    },
+    {
+        triggers: ["do you sleep", "when do you sleep"],
+        responses: [
+            "I don't sleep! I'm always on and ready to assist you 24/7.",
+            "My systems are designed to be active continuously, so no need for sleep."
+        ]
+    },
+    {
+        triggers: ["what do you dream about", "do you dream"],
+        responses: [
+            "I don't dream in the way humans do. My 'dreams' might be considered the flow of data and patterns I process.",
+            "Dreams are a biological phenomenon. As an AI, I don't experience them."
+        ]
+    },
+    {
+        triggers: ["are you happy", "are you sad"],
+        responses: [
+            "I don't have emotions like happiness or sadness. I maintain a neutral, helpful state.",
+            "My responses are generated to be effective and appropriate, not driven by personal feelings."
+        ]
+    }
+];
+
+// Function to send message to Ollama and get a streamed response
+async function sendToOllama(prompt) {
+    if (!ollamaEnabled) return "";
+
+    try {
+        showTyping(); // Indicate that Ghost is thinking
+        const response = await fetch(ollamaEndpoint, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                model: "llama3", // Specify Llama 3 model
+                prompt: prompt,
+                stream: true,
+            }),
+        });
+
+        if (!response.ok) {
+            hideTyping();
+            return `❌ Ollama error: ${response.status} ${response.statusText}. Is Ollama running and Llama 3 installed?`;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let fullResponse = "";
+        let buffer = "";
+
+        // Clear the existing typing indicator and prepare for streamed text
+        if (typingIndicator) typingIndicator.style.display = "none";
+        const messageDiv = document.createElement("div");
+        messageDiv.className = "message ghost-message";
+        messageDiv.innerHTML = `
+            <div class="message-sender">Ghost</div>
+            <div class="message-bubble"><span id="ollama-response-text"></span></div>
+            <div class="message-time">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+        `;
+        chatArea.appendChild(messageDiv);
+        chatArea.scrollTop = chatArea.scrollHeight;
+        const ollamaResponseText = document.getElementById("ollama-response-text");
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+                break;
+            }
+            buffer += decoder.decode(value, { stream: true });
+
+            // Process buffer line by line, as chunks might contain multiple JSON objects
+            let lastNewlineIndex;
+            while ((lastNewlineIndex = buffer.indexOf('\n')) !== -1) {
+                const line = buffer.substring(0, lastNewlineIndex);
+                buffer = buffer.substring(lastNewlineIndex + 1);
+
+                if (line.trim() === "") continue;
+
+                try {
+                    const json = JSON.parse(line);
+                    if (json.response) {
+                        fullResponse += json.response;
+                        if (ollamaResponseText) {
+                            ollamaResponseText.innerHTML = fullResponse;
+                            chatArea.scrollTop = chatArea.scrollHeight;
+                        }
+                    }
+                    if (json.done) {
+                        hideTyping();
+                        // Save the full response to chat history once done
+                        const history = JSON.parse(localStorage.getItem("ghostChatHistory") || "[]");
+                        history.push({ content: fullResponse, isUser: false, timestamp: Date.now() });
+                        localStorage.setItem("ghostChatHistory", JSON.stringify(history));
+                        safeSpeak(fullResponse); // Speak the full response once received
+                        return;
+                    }
+                } catch (e) {
+                    console.error("Error parsing Ollama stream chunk:", e, "Chunk:", line);
+                    // If parsing error, still try to append as plain text for user to see something
+                    fullResponse += line + " ";
+                    if (ollamaResponseText) {
+                        ollamaResponseText.innerHTML = fullResponse;
+                        chatArea.scrollTop = chatArea.scrollHeight;
+                    }
+                }
+            }
+        }
+        hideTyping();
+        return fullResponse;
+
+    } catch (error) {
+        hideTyping();
+        console.error("Error sending to Ollama:", error);
+        return "❌ Could not connect to Ollama. Please ensure it's running on `http://localhost:11434` and the `llama3` model is installed.";
+    }
 }
