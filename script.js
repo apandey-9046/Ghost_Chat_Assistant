@@ -1117,7 +1117,7 @@ async function processCommandQueue() {
 
 
 // Core function to generate response based on user message
-function getResponse(message) {
+async function getResponse(message, inInteractiveMode) {
     const lower = message.toLowerCase().trim();
     const words = lower.split(/\s+/);
 
@@ -1925,11 +1925,14 @@ function getResponse(message) {
     if (ollamaEnabled && !inInteractiveMode) {
         // Fetch chat history for context
         const chatHistory = JSON.parse(localStorage.getItem("ghostChatHistory") || "[]");
-        const ollamaPrompt = chatHistory.map(entry => `User: ${entry.isUser ? entry.content : `Assistant: ${entry.content}`}`).join("\n") + `\nUser: ${message}`; 
+        // Limit history to a reasonable amount to avoid excessively long prompts
+        const recentHistory = chatHistory.slice(-10); // Get last 10 messages
+
+        const ollamaPrompt = recentHistory.map(entry => `User: ${entry.isUser ? entry.content : `Assistant: ${entry.content}`}`).join("\n") + `\nUser: ${message}`; 
         
         // Asynchronously send to Ollama and add response
-        sendToOllama(ollamaPrompt);
-        return; // Return immediately, response will be added by sendToOllama
+        const ollamaResponse = await sendToOllama(ollamaPrompt);
+        return ollamaResponse; 
     }
 
     const defaultResponses = [
