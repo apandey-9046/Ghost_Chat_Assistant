@@ -16,12 +16,13 @@
 body {
     background: #000;
     color: #fff;
-    height: var(--app-height);
+    min-height: 100vh;
     display: flex;
     justify-content: center;
     align-items: center;
     padding: 0;
     margin: 0;
+    overflow: hidden;
 }
 
 /* App Container - Responsive & Safe Area Support */
@@ -32,6 +33,7 @@ body {
     display: flex;
     flex-direction: column;
     position: relative;
+    overflow: hidden;
     padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
