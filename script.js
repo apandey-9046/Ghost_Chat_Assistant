@@ -11,6 +11,15 @@ let awaitingTaskInput = false;
 let awaitingReminderInput = false;
 let awaitingReminderTime = false;
 let tempReminderText = "";
+let awaitingContactName = false; // <-- ADDED
+let tempContactName = ""; // <-- ADDED
+let awaitingExpenseDetails = false; // <-- ADDED
+let tempExpenseAmount = ""; // <-- ADDED
+let tempExpenseDescription = ""; // <-- ADDED
+let awaitingExpenseCategory = false; // <-- ADDED
+let awaitingExpenseMode = false; // <-- ADDED
+let awaitingContactConfirmation = false; // <-- ADDED
+let tempContactPhone = ""; // <-- ADDED
 
 // Debounce timer for auto-sending typed messages
 let typingTimeout = null;
@@ -40,16 +49,13 @@ function hideTyping() {
 function addMessage(content, isUser) {
     const messageDiv = document.createElement("div");
     messageDiv.className = isUser ? "message user-message" : "message ghost-message";
-
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
     messageDiv.innerHTML = `
         <div class="message-sender">${isUser ? "You" : "Ghost"}</div>
         <div class="message-bubble">${content}</div>
         <div class="message-time">${timeStr}</div>
     `;
-
     chatArea.appendChild(messageDiv);
     chatArea.scrollTop = chatArea.scrollHeight;
     hideTyping();
@@ -70,19 +76,15 @@ function loadChatHistory() {
     try {
         const history = JSON.parse(localStorage.getItem("ghostChatHistory") || "[]");
         if (history.length === 0) return;
-
         history.forEach(msg => {
             const messageDiv = document.createElement("div");
             messageDiv.className = msg.isUser ? "message user-message" : "message ghost-message";
-
             const timeStr = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
             messageDiv.innerHTML = `
                 <div class="message-sender">${msg.isUser ? "You" : "Ghost"}</div>
                 <div class="message-bubble">${msg.content}</div>
                 <div class="message-time">${timeStr}</div>
             `;
-
             chatArea.appendChild(messageDiv);
         });
         chatArea.scrollTop = chatArea.scrollHeight;
@@ -119,7 +121,6 @@ const platformVoices = {
         { name: 'Default Female', voiceName: 'en-US-Standard-C', gender: 'female' }
     ]
 };
-
 let availableVoices = [];
 let currentVoiceName = '';
 
@@ -138,13 +139,10 @@ function getPreferredVoice() {
     const voices = synth.getVoices();
     const platform = detectPlatform();
     const platformVoiceList = platformVoices[platform] || platformVoices.default;
-
     availableVoices = platformVoiceList.map(v => v.name);
-
     if (!currentVoiceName) {
         currentVoiceName = platformVoiceList[0].voiceName;
     }
-
     const selectedVoice = voices.find(v => v.name === currentVoiceName);
     return selectedVoice || voices.find(v => v.lang.startsWith('en-')) || voices[0];
 }
@@ -177,24 +175,20 @@ function speak(text) {
     if (isSpeaking || !voiceEnabled) return;
     synth.cancel(); // Cancel any ongoing speech
     isSpeaking = true;
-
     const textToSpeak = stripHtml(removeEmojis(text));
     if (!textToSpeak) {
         isSpeaking = false;
         return;
     }
-
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
     utterance.voice = getPreferredVoice();
     utterance.rate = 0.95; // Slightly slower for natural feel
     utterance.pitch = 1.1; // Slightly higher for clarity
     utterance.volume = 1;
-
     utterance.onstart = () => {
         isSpeaking = true;
-        if (isMicOn) recognition.stop();
+        if (isMicOn) recognition.stop(); // <-- ADDED: Stop recognition when speaking starts
     };
-
     utterance.onend = () => {
         isSpeaking = false;
         if (isMicOn) {
@@ -209,7 +203,6 @@ function speak(text) {
             }, 500);
         }
     };
-
     utterance.onerror = (e) => {
         console.error("Speech synthesis error:", e);
         isSpeaking = false;
@@ -225,7 +218,6 @@ function speak(text) {
             }, 500);
         }
     };
-
     synth.speak(utterance);
 }
 
@@ -255,18 +247,15 @@ function listVoices() {
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition;
 let isMicOn = false;
-
 if (SpeechRecognition) {
     recognition = new SpeechRecognition();
     recognition.lang = 'en-US';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    recognition.continuous = false;
-
+    recognition.continuous = false; // Keep continuous off for better control
     micButton.addEventListener("click", () => {
         navigator.mediaDevices.getUserMedia({ audio: true }).then(() => {
             isMicOn = !isMicOn;
-
             if (isMicOn) {
                 try {
                     recognition.start();
@@ -298,25 +287,28 @@ if (SpeechRecognition) {
             micButton.style.color = "#ff4757"; // Indicate disabled
         });
     });
-
     recognition.addEventListener("result", (e) => {
         const transcript = Array.from(e.results)
             .map(result => result[0])
             .map(result => result.transcript)
             .join('')
             .trim();
-
         if (transcript) {
             userInput.value = transcript;
+            // <-- ADDED: Prioritize user input over speaking
+            if (isSpeaking) {
+                synth.cancel();
+                isSpeaking = false;
+            }
             setTimeout(() => {
                 if (isMicOn) {
-                    sendMessage();
+                    sendMessage(); // <-- CHANGED: Call sendMessage directly
                 }
-            }, 500);
+            }, 100); // <-- CHANGED: Reduced delay for quicker response
         }
     });
-
     recognition.addEventListener("end", () => {
+        // <-- CHANGED: Simplified mic restart logic
         if (isMicOn && !isSpeaking) {
             setTimeout(() => {
                 if (isMicOn && !isSpeaking) {
@@ -336,7 +328,6 @@ if (SpeechRecognition) {
             }
         }
     });
-
     recognition.addEventListener("error", (event) => {
         console.error("Speech recognition error:", event.error);
         if (isMicOn && event.error === 'no-speech') {
@@ -394,10 +385,9 @@ let featureList = `
 ✅ <strong>Stop:</strong> Say "Stop" to cancel anything<br><br>
 Just ask me anything! 😊
 `.trim();
-
 const featureVoiceMessage = "Here are the things I can help you with!";
 
-// General knowledge quiz questions with options and answers
+// General knowledge quiz questions with options and answers (Expanded)
 const gkQuiz = [
     {
         question: "What is the capital of India?",
@@ -409,6 +399,46 @@ const gkQuiz = [
         options: ["A) Jawaharlal Nehru", "B) Mahatma Gandhi", "C) Subhas Chandra Bose", "D) Sardar Patel"],
         answer: "B"
     },
+    {
+        question: "What is the largest planet in our solar system?",
+        options: ["A) Earth", "B) Mars", "C) Jupiter", "D) Saturn"],
+        answer: "C"
+    },
+    {
+        question: "Which element has the chemical symbol 'O'?",
+        options: ["A) Gold", "B) Oxygen", "C) Osmium", "D) Oganesson"],
+        answer: "B"
+    },
+    {
+        question: "In which year did World War II end?",
+        options: ["A) 1943", "B) 1944", "C) 1945", "D) 1946"],
+        answer: "C"
+    },
+    {
+        question: "What is the tallest mammal?",
+        options: ["A) Elephant", "B) Giraffe", "C) Blue Whale", "D) Hippopotamus"],
+        answer: "B"
+    },
+    {
+        question: "Which is the largest ocean on Earth?",
+        options: ["A) Atlantic Ocean", "B) Indian Ocean", "C) Arctic Ocean", "D) Pacific Ocean"],
+        answer: "D"
+    },
+    {
+        question: "How many bones are in the human body?",
+        options: ["A) 206", "B) 208", "C) 210", "D) 300"],
+        answer: "A"
+    },
+    {
+        question: "What is the currency of Japan?",
+        options: ["A) Yuan", "B) Won", "C) Yen", "D) Ringgit"],
+        answer: "C"
+    },
+    {
+        question: "Mount Everest is located in which mountain range?",
+        options: ["A) Alps", "B) Rockies", "C) Andes", "D) Himalayas"],
+        answer: "D"
+    }
 ];
 
 // Quiz-related variables
@@ -423,7 +453,7 @@ function startQuizTimer() {
     clearQuizTimer();
     quizTimer = setTimeout(() => {
         if (quizActive && quizIndex < quizQuestions.length) {
-            addMessage(`⏰ Time's up! Correct answer was: ${quizQuestions[quizIndex].answer}`, false);
+            addMessage(`⏰ Time's up! Correct answer was: ${quizQuestions[quizIndex].answer} (${quizQuestions[quizIndex].options.find(o => o.startsWith(quizQuestions[quizIndex].answer))?.split(')')[1]?.trim()})`, false);
             playWrongSound();
             quizIndex++;
             if (quizIndex < quizQuestions.length) {
@@ -455,7 +485,8 @@ function clearQuizTimer() {
 function endQuiz() {
     quizActive = false;
     clearQuizTimer();
-    const msg = `🎉 Quiz Completed!\nYou scored ${quizScore} out of ${quizQuestions.length}.`;
+    const msg = `🎉 Quiz Completed!
+You scored ${quizScore} out of ${quizQuestions.length}.`;
     addMessage(msg, false);
     safeSpeak(`Quiz completed! You scored ${quizScore} out of ${quizQuestions.length}.`);
 }
@@ -480,7 +511,6 @@ function trackHabit(habitName) {
     const habits = getHabits();
     const today = new Date().toDateString();
     const existingHabit = habits.find(h => h.name.toLowerCase() === habitName.toLowerCase());
-
     if (existingHabit) {
         if (!existingHabit.dates.includes(today)) {
             existingHabit.dates.push(today);
@@ -494,7 +524,6 @@ function trackHabit(habitName) {
             createdAt: new Date().toLocaleString()
         });
     }
-
     saveHabits(habits);
     return `✅ Habit "${habitName}" tracked for today!`;
 }
@@ -505,7 +534,6 @@ function showHabits() {
     if (habits.length === 0) {
         return "📋 No habits tracked yet. Use 'Track habit: Meditation' to start!";
     }
-
     let table = `
         <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
             <tr style="background: #2d2d2d; color: white;">
@@ -514,7 +542,6 @@ function showHabits() {
                 <th style="text-align: left;">Last Done</th>
             </tr>
     `;
-
     habits.forEach(habit => {
         const lastDone = habit.dates.length > 0 ?
             new Date(habit.dates[habit.dates.length - 1]).toLocaleDateString() :
@@ -527,7 +554,6 @@ function showHabits() {
             </tr>
         `;
     });
-
     table += `</table>`;
     return table;
 }
@@ -542,19 +568,20 @@ function saveExpenses(expenses) {
     localStorage.setItem("ghostExpenses", JSON.stringify(expenses));
 }
 
-// Function to add an expense entry
-function addExpense(amount, description) {
+// Function to add an expense entry (Updated flow)
+function addExpense(amount, description, category, mode) {
     const expenses = getExpenses();
     const expense = {
         amount: parseFloat(amount),
         description: description,
+        category: category,
+        mode: mode,
         date: new Date().toLocaleString()
     };
     expenses.push(expense);
     saveExpenses(expenses);
-
     const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-    return `✅ Expense added: ₹${amount} for ${description}<br>📊 Total spent: ₹${total.toFixed(2)}`;
+    return `✅ Expense added: ₹${amount} for ${description} (${category}, ${mode})<br>📊 Total spent: ₹${total.toFixed(2)}`;
 }
 
 // Function to display expenses in a table
@@ -563,16 +590,16 @@ function showExpenses() {
     if (expenses.length === 0) {
         return "💰 No expenses recorded yet. Use 'Add expense: 50 for food' to start!";
     }
-
     let table = `
         <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
             <tr style="background: #2d2d2d; color: white;">
                 <th style="text-align: left;">Amount</th>
                 <th style="text-align: left;">Description</th>
+                <th style="text-align: left;">Category</th>
+                <th style="text-align: left;">Mode</th>
                 <th style="text-align: left;">Date</th>
             </tr>
     `;
-
     let total = 0;
     expenses.forEach(expense => {
         total += expense.amount;
@@ -580,14 +607,15 @@ function showExpenses() {
             <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
                 <td>₹${expense.amount.toFixed(2)}</td>
                 <td>${expense.description}</td>
+                <td>${expense.category || 'N/A'}</td>
+                <td>${expense.mode || 'N/A'}</td>
                 <td>${expense.date}</td>
             </tr>
         `;
     });
-
     table += `
         <tr style="background: #2d2d2d; color: white; font-weight: bold;">
-            <td colspan="2">Total:</td>
+            <td colspan="4">Total:</td>
             <td>₹${total.toFixed(2)}</td>
         </tr>
     `;
@@ -604,10 +632,8 @@ function startPomodoro(minutes = 25) {
     if (pomodoroTimer) {
         clearTimeout(pomodoroTimer);
     }
-
     pomodoroTimeLeft = minutes * 60;
     const endTime = new Date(Date.now() + pomodoroTimeLeft * 1000);
-
     function updateTimer() {
         if (pomodoroTimeLeft <= 0) {
             addMessage("⏰ Pomodoro session completed! Time for a break!", false);
@@ -617,11 +643,9 @@ function startPomodoro(minutes = 25) {
             pomodoroTimer = null;
             return;
         }
-
         pomodoroTimeLeft--;
         setTimeout(updateTimer, 1000);
     }
-
     pomodoroTimer = setTimeout(updateTimer, 1000);
     return `⏱️ Pomodoro timer started for ${minutes} minutes!`;
 }
@@ -655,9 +679,7 @@ function showMoodHistory() {
     if (moods.length === 0) {
         return "🎭 No moods logged yet. Use 'Log mood: Happy' to start!";
     }
-
     moods.sort((a, b) => b.timestamp - a.timestamp);
-
     let table = `
         <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
             <tr style="background: #2d2d2d; color: white;">
@@ -665,7 +687,6 @@ function showMoodHistory() {
                 <th style="text-align: left;">Date</th>
             </tr>
     `;
-
     moods.forEach(mood => {
         table += `
             <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
@@ -674,7 +695,6 @@ function showMoodHistory() {
             </tr>
         `;
     });
-
     table += `</table>`;
     return table;
 }
@@ -709,7 +729,6 @@ function showGoals() {
     if (goals.length === 0) {
         return "🎯 No goals set yet. Use 'Set goal: Learn JavaScript' to start!";
     }
-
     let table = `
         <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
             <tr style="background: #2d2d2d; color: white;">
@@ -718,7 +737,6 @@ function showGoals() {
                 <th style="text-align: left;">Created</th>
             </tr>
     `;
-
     goals.forEach(goal => {
         const status = goal.status === "completed" ? "✅ Completed" : "⏳ Pending";
         table += `
@@ -729,9 +747,8 @@ function showGoals() {
             </tr>
         `;
     });
-
     table += `</table>`;
-    return table;
+    return table; // <-- CHANGED: Return only the table
 }
 
 // Function to get contacts from localStorage
@@ -744,7 +761,7 @@ function saveContacts(contacts) {
     localStorage.setItem("ghostContacts", JSON.stringify(contacts));
 }
 
-// Function to add a contact
+// Function to add a contact (Updated flow)
 function addContact(name, phone) {
     const contacts = getContacts();
     const contact = {
@@ -763,7 +780,6 @@ function showContacts() {
     if (contacts.length === 0) {
         return "📞 No contacts saved yet. Use 'Add contact: John 1234567890' to start!";
     }
-
     let table = `
         <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
             <tr style="background: #2d2d2d; color: white;">
@@ -772,7 +788,6 @@ function showContacts() {
                 <th style="text-align: left;">Added</th>
             </tr>
     `;
-
     contacts.forEach(contact => {
         table += `
             <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
@@ -782,7 +797,6 @@ function showContacts() {
             </tr>
         `;
     });
-
     table += `</table>`;
     return table;
 }
@@ -826,7 +840,6 @@ function showDailyPlan() {
     if (plan.length === 0) {
         return "📅 No daily plan yet. Use 'Plan day: Study 2 hours' to start!";
     }
-
     let table = `
         <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
             <tr style="background: #2d2d2d; color: white;">
@@ -835,7 +848,6 @@ function showDailyPlan() {
                 <th style="text-align: left;">Added</th>
             </tr>
     `;
-
     plan.forEach(item => {
         const status = item.completed ? "✅ Done" : "⏳ Pending";
         table += `
@@ -846,7 +858,6 @@ function showDailyPlan() {
             </tr>
         `;
     });
-
     table += `</table>`;
     return table;
 }
@@ -880,7 +891,6 @@ function showHealthLogs() {
     if (logs.length === 0) {
         return "💪 No health logs yet. Use 'Log water: 500ml' to start!";
     }
-
     let table = `
         <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
             <tr style="background: #2d2d2d; color: white;">
@@ -889,7 +899,6 @@ function showHealthLogs() {
                 <th style="text-align: left;">Date</th>
             </tr>
     `;
-
     logs.forEach(log => {
         table += `
             <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
@@ -899,7 +908,6 @@ function showHealthLogs() {
             </tr>
         `;
     });
-
     table += `</table>`;
     return table;
 }
@@ -933,7 +941,6 @@ function showFlashcards() {
     if (flashcards.length === 0) {
         return "📚 No flashcards yet. Use 'Add flashcard: Capital of India - New Delhi' to start!";
     }
-
     let cards = "📚 Your Flashcards:<br><br>";
     flashcards.forEach((card, index) => {
         cards += `
@@ -945,78 +952,139 @@ function showFlashcards() {
             </div>
         `;
     });
-
     return cards;
 }
 
-// Daily conversation triggers
+// Daily conversation triggers (Expanded)
 const dailyConversations = {
     greetings: [
         "hi", "hello", "hey", "hlo", "namaste", "good morning", "good afternoon",
-        "good evening", "sup", "whats up", "howdy", "greetings"
+        "good evening", "sup", "whats up", "howdy", "greetings", "yo", "hai", "hii"
     ],
     howAreYou: [
         "how are you", "how r u", "how are u", "kaise ho", "how are you doing",
-        "how you doing", "are you fine", "are you okay"
+        "how you doing", "are you fine", "are you okay", "how's it going", "how do you do", "kya haal hai"
     ],
     myName: [
-        "my name", "who am i", "what is my name", "do you know my name"
+        "my name", "who am i", "what is my name", "do you know my name", "tell me my name", "what's my name"
     ],
     yourName: [
-        "your name", "what is your name", "who are you", "what are you"
+        "your name", "what is your name", "who are you", "what are you", "identify yourself", "who r u"
     ],
     owner: [
         "your owner", "who made you", "who created you", "who built you",
-        "who developed you", "who programmed you"
+        "who developed you", "who programmed you", "who is your creator", "who is your developer"
     ],
     time: [
-        "time", "what time", "current time", "tell me time"
+        "time", "what time", "current time", "tell me time", "what's the time", "time now", "clock"
     ],
     date: [
-        "date", "today", "what date", "current date", "what is today"
+        "date", "today", "what date", "current date", "what is today", "what's today's date", "calendar"
     ],
     help: [
         "what can you do", "help", "features", "what can you do", "show features",
-        "what are your features", "capabilities", "what can you help me with"
+        "what are your features", "capabilities", "what can you help me with", "commands", "options", "functions"
     ],
     stop: [
-        "stop", "shut up", "cancel", "quiet", "stop talking", "be quiet", "silence"
+        "stop", "shut up", "cancel", "quiet", "stop talking", "be quiet", "silence", "pause", "mute"
     ],
     clear: [
-        "clear chat", "clear history", "delete chat", "reset chat"
+        "clear chat", "clear history", "delete chat", "reset chat", "forget everything", "start over"
     ]
 };
+
+// Function to process multiple commands in a single message
+function processMultiCommand(message) {
+    // List of all command triggers
+    const commandTriggers = [
+        // Quiz triggers
+        "let's play quiz", "play quiz", "start quiz", "quiz time", "quiz", "i want to play quiz", "take a quiz", "give me a quiz",
+        // RPS triggers
+        "rps", "rock paper scissors", "play rps", "lets play game", "game", "play game", "lets play rps", "play rock paper scissors",
+        // Other specific triggers
+        "add contact", "show contacts", "view contacts", "my contacts",
+        "add expense", "log expense", "show expenses", "view expenses", "my expenses",
+        "track habit", "log habit", "show habits", "view habits", "my habits",
+        "set goal", "add goal", "show goals", "view goals", "my goals",
+        "log mood", "track mood", "show mood", "view mood", "mood history",
+        "plan day", "add plan", "show plan", "view plan", "daily plan",
+        "log water", "log health", "show health", "view health", "health log",
+        "add flashcard", "show flashcards", "view flashcards", "my flashcards",
+        "generate password", "create password",
+        "switch voice to", "list voices",
+        "remind me", "set reminder", "alert me in", "notify me", "add reminder",
+        "add task", "create task", "add new task", "create new task", "make a task", "add a task", "show tasks", "my tasks", "todo", "list tasks", "view tasks",
+        "note:", "save:", "save note", "add note", "create note", "my notes", "saved notes", "view notes", "show notes",
+        "weight", "height", "bmi", "body mass index",
+        "play", "youtube", "song", "music", "listen to",
+        "help", "features", "what can you do", "show features", "what are your features", "capabilities", "what can you help me with",
+        "stop", "shut up", "cancel", "quiet", "stop talking", "be quiet", "silence",
+        "clear chat", "clear history", "delete chat", "reset chat",
+        "hi", "hello", "hey", "hlo", "namaste", "good morning", "good afternoon", "good evening", "sup", "whats up", "howdy", "greetings",
+        "how are you", "how r u", "how are u", "kaise ho", "how are you doing", "how you doing", "are you fine", "are you okay",
+        "my name", "who am i", "what is my name", "do you know my name",
+        "your name", "what is your name", "who are you", "what are you",
+        "your owner", "who made you", "who created you", "who built you", "who developed you", "who programmed you",
+        "time", "what time", "current time", "tell me time",
+        "date", "today", "what date", "current date", "what is today",
+        "what is", "solve", "calculate", "=", // Math
+        "usd", "inr", "eur", "gbp", "jpy", "cad", "aud", "chf", "cny", "sek", "nzd", "mxn", "sgd", "hkd", "nok", "krw", "try", "rub", "brl", "zar", "rs", "$", "€", "£", "¥" // Currency
+    ];
+
+    // Create a regex to split the message by command triggers
+    const triggerRegex = new RegExp(`(?=\\b(?:${commandTriggers.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b)`, 'gi');
+    const commands = message.split(triggerRegex).filter(cmd => cmd.trim() !== '');
+
+    if (commands.length > 1) {
+        // Process commands sequentially
+        let index = 0;
+        const processNext = () => {
+            if (index < commands.length) {
+                const cmd = commands[index].trim();
+                index++;
+                if (cmd) { // Ensure command is not empty
+                    const response = getResponse(cmd);
+                    if (response !== undefined) {
+                        addMessage(response, false);
+                        safeSpeak(response);
+                    }
+                }
+                // Add a small delay between processing commands
+                setTimeout(processNext, 300 + Math.random() * 200);
+            }
+        };
+        processNext();
+        return true; // Indicating multi-command processing started
+    }
+    return false; // Not a multi-command
+}
 
 // Core function to generate response based on user message
 function getResponse(message) {
     const lower = message.toLowerCase().trim();
     const words = lower.split(/\s+/);
 
+    // Handle awaiting inputs first
     if (awaitingTaskInput) {
         awaitingTaskInput = false;
         const task = message.trim();
         if (!task) return "❌ Please provide a task to add.";
-
         const tasks = getTasks();
         tasks.push({ text: task, time: new Date().toLocaleString() });
         saveTasks(tasks);
         return `✅ Task added: "${task}"`;
     }
-
     if (awaitingReminderInput) {
         awaitingReminderInput = false;
         awaitingReminderTime = true;
         tempReminderText = message.trim();
         return `⏰ "${tempReminderText}" When To Remind You? (Example: 5 minutes, 1 hour, tomorrow)`;
     }
-
     if (awaitingReminderTime) {
         awaitingReminderTime = false;
         const timeText = message.trim();
-
         let ms = 0;
         let displayTime = "";
-
         if (timeText.includes("minute") || timeText.includes("min")) {
             const match = timeText.match(/(\d+)/);
             if (match) {
@@ -1042,7 +1110,6 @@ function getResponse(message) {
             ms = 300000;
             displayTime = "5 minutes";
         }
-
         if (ms > 0) {
             const timerId = setTimeout(() => {
                 const notificationMsg = `🔔 Reminder: ${tempReminderText}`;
@@ -1054,7 +1121,6 @@ function getResponse(message) {
                     new Notification("Ghost Reminder", { body: tempReminderText });
                 }
             }, ms);
-
             activeReminders.push(timerId);
             const finalText = tempReminderText;
             tempReminderText = "";
@@ -1065,14 +1131,111 @@ function getResponse(message) {
         }
     }
 
+    // New awaiting states for contact and expense
+    if (awaitingContactName) {
+        awaitingContactName = false;
+        const name = message.trim();
+        if (!name) return "❌ Please provide a name for the contact.";
+        tempContactName = name;
+        return `📞 Okay, what is ${name}'s phone number?`;
+    }
+
+    if (awaitingContactConfirmation) { // <-- ADDED: Handle contact confirmation
+        awaitingContactConfirmation = false;
+        if (lower === "confirm") {
+            const result = addContact(tempContactName, tempContactPhone);
+            tempContactName = "";
+            tempContactPhone = "";
+            return result;
+        } else if (lower === "cancel") {
+            tempContactName = "";
+            tempContactPhone = "";
+            return "Contact addition cancelled.";
+        } else {
+            // If user provides something else, treat it as the phone number
+            const phone = message.trim();
+            if (!phone) return "❌ Please provide a phone number or type 'cancel'.";
+            tempContactPhone = phone;
+            const previewMsg = `🔍 Preview Contact:
+Name: ${tempContactName}
+Phone: ${tempContactPhone}
+Type 'confirm' to save or 'cancel' to discard.`;
+            awaitingContactConfirmation = true; // Re-enable confirmation state
+            return previewMsg;
+        }
+    }
+
+    if (awaitingExpenseDetails) {
+        awaitingExpenseDetails = false;
+        const details = message.trim();
+        if (!details) return "❌ Please provide expense details (amount and description). Example: '50 for food'";
+        const expenseMatch = details.match(/(\d+(?:\.\d+)?)\s*(?:for|on)?\s*(.+)/i);
+        if (expenseMatch && expenseMatch[1] && expenseMatch[2]) {
+            tempExpenseAmount = expenseMatch[1];
+            tempExpenseDescription = expenseMatch[2];
+            awaitingExpenseCategory = true;
+            return `🏷️ What category is this expense? (e.g., Food, Travel, Entertainment)`;
+        } else {
+            return "❌ Please specify amount and description correctly. Example: '50 for food'";
+        }
+    }
+
+    if (awaitingExpenseCategory) {
+        awaitingExpenseCategory = false;
+        const category = message.trim();
+        if (!category) return "❌ Please provide a category.";
+        tempExpenseCategory = category; // <-- ADDED
+        awaitingExpenseMode = true;
+        return `💳 How did you pay? (e.g., Cash, Card, Wallet, Online)`;
+    }
+
+    if (awaitingExpenseMode) {
+        awaitingExpenseMode = false;
+        const mode = message.trim();
+        if (!mode) return "❌ Please provide the payment mode.";
+        tempExpenseMode = mode; // <-- ADDED
+
+        // Preview before saving
+        const previewMsg = `🔍 Preview Expense:
+Amount: ₹${tempExpenseAmount}
+Description: ${tempExpenseDescription}
+Category: ${tempExpenseCategory}
+Mode: ${tempExpenseMode}
+Type 'confirm' to save or 'cancel' to discard.`;
+        awaitingExpenseConfirmation = true; // <-- ADDED: New state for expense confirmation
+        return previewMsg;
+    }
+
+    if (awaitingExpenseConfirmation) { // <-- ADDED: Handle expense confirmation
+        awaitingExpenseConfirmation = false;
+        if (lower === "confirm") {
+            const result = addExpense(tempExpenseAmount, tempExpenseDescription, tempExpenseCategory, tempExpenseMode);
+            tempExpenseAmount = "";
+            tempExpenseDescription = "";
+            tempExpenseCategory = "";
+            tempExpenseMode = "";
+            return result;
+        } else if (lower === "cancel") {
+            tempExpenseAmount = "";
+            tempExpenseDescription = "";
+            tempExpenseCategory = "";
+            tempExpenseMode = "";
+            return "Expense addition cancelled.";
+        } else {
+            return "Please type 'confirm' to save or 'cancel' to discard the expense.";
+        }
+    }
+
+    // Stop command (highest priority)
     if (dailyConversations.stop.some(cmd => lower.includes(cmd))) {
         synth.cancel();
         isSpeaking = false;
         return "Okay, I'm stopping right away. 😶";
     }
 
+    // Clear command
     if (dailyConversations.clear.some(cmd => lower.includes(cmd))) {
-        const password = prompt("🔐 Enter password to clear chat:\n\n");
+        const password = prompt("🔐 Enter password to clear chat:");
         if (password === "Arpit@232422") {
             Array.from(chatArea.children).forEach(child => {
                 if (child !== typingIndicator) {
@@ -1086,6 +1249,7 @@ function getResponse(message) {
         }
     }
 
+    // Help command
     if (dailyConversations.help.some(cmd => lower.includes(cmd))) {
         addMessage(featureList, false);
         safeSpeak(featureVoiceMessage);
@@ -1101,11 +1265,11 @@ function getResponse(message) {
             return;
         }
     }
-
     if (lower.includes("list voices")) {
         return listVoices();
     }
 
+    // Habit Tracker
     if (lower.includes("track habit") || lower.includes("log habit")) {
         const habitMatch = message.match(/(?:track|log) habit:?\s*(.+)/i);
         if (habitMatch && habitMatch[1]) {
@@ -1114,36 +1278,39 @@ function getResponse(message) {
             return "❌ Please specify habit name. Example: 'Track habit: Meditation'";
         }
     }
-
     if (lower.includes("show habits") || lower.includes("view habits") || lower.includes("my habits")) {
         return showHabits();
     }
 
+    // Expense Manager (Updated flow)
     if (lower.includes("add expense") || lower.includes("log expense")) {
-        const expenseMatch = message.match(/(?:add|log) expense:?\s*(\d+(?:\.\d+)?)\s*(?:for|on)?\s*(.+)/i);
-        if (expenseMatch && expenseMatch[1] && expenseMatch[2]) {
-            return addExpense(expenseMatch[1], expenseMatch[2]);
+        const expenseMatch = message.match(/(?:add|log) expense:?\s*(.+)/i);
+        if (expenseMatch && expenseMatch[1]) {
+            // Start the flow for getting details
+            awaitingExpenseDetails = true;
+            return getResponse(expenseMatch[1]); // Re-process the details part
         } else {
-            return "❌ Please specify amount and description. Example: 'Add expense: 50 for food'";
+            awaitingExpenseDetails = true;
+            return "💰 Please provide the expense details (amount and description). Example: 'Add expense: 50 for food'";
         }
     }
-
     if (lower.includes("show expenses") || lower.includes("view expenses") || lower.includes("my expenses")) {
         return showExpenses();
     }
 
+    // Pomodoro Timer
     if (lower.includes("start pomodoro") || lower.includes("pomodoro timer")) {
         const timeMatch = message.match(/(\d+)\s*(?:min|minute|minutes)/i);
         const minutes = timeMatch ? parseInt(timeMatch[1]) : 25;
         return startPomodoro(minutes);
     }
-
     if (lower.includes("study timer") || lower.includes("focus timer")) {
         const timeMatch = message.match(/(\d+)\s*(?:min|minute|minutes)/i);
         const minutes = timeMatch ? parseInt(timeMatch[1]) : 25;
         return startPomodoro(minutes);
     }
 
+    // Mood Journal
     if (lower.includes("log mood") || lower.includes("track mood")) {
         const moodMatch = message.match(/(?:log|track) mood:?\s*(.+)/i);
         if (moodMatch && moodMatch[1]) {
@@ -1152,11 +1319,11 @@ function getResponse(message) {
             return "❌ Please specify your mood. Example: 'Log mood: Happy'";
         }
     }
-
     if (lower.includes("show mood") || lower.includes("view mood") || lower.includes("mood history")) {
         return showMoodHistory();
     }
 
+    // Goal Tracker
     if (lower.includes("set goal") || lower.includes("add goal")) {
         const goalMatch = message.match(/(?:set|add) goal:?\s*(.+)/i);
         if (goalMatch && goalMatch[1]) {
@@ -1165,28 +1332,40 @@ function getResponse(message) {
             return "❌ Please specify your goal. Example: 'Set goal: Learn JavaScript'";
         }
     }
-
     if (lower.includes("show goals") || lower.includes("view goals") || lower.includes("my goals")) {
-        return showGoals();
+        return showGoals(); // <-- CHANGED: Now returns only the table
     }
 
+    // Contact Manager (Updated flow)
     if (lower.includes("add contact")) {
         const contactMatch = message.match(/add contact:?\s*(.+?)\s+(\d+)/i);
         if (contactMatch && contactMatch[1] && contactMatch[2]) {
-            return addContact(contactMatch[1], contactMatch[2]);
+            // Preview before saving if full details are provided
+            const name = contactMatch[1].trim();
+            const phone = contactMatch[2].trim();
+            const previewMsg = `🔍 Preview Contact:
+Name: ${name}
+Phone: ${phone}
+Type 'confirm' to save or 'cancel' to discard.`;
+            tempContactName = name;
+            tempContactPhone = phone;
+            awaitingContactConfirmation = true;
+            return previewMsg;
         } else {
-            return "❌ Please specify name and phone. Example: 'Add contact: John 1234567890'";
+            awaitingContactName = true;
+            return "📞 Okay, what is the contact's name?";
         }
     }
-
     if (lower.includes("show contacts") || lower.includes("view contacts") || lower.includes("my contacts")) {
         return showContacts();
     }
 
+    // Password Generator
     if (lower.includes("generate password") || lower.includes("create password")) {
         return generatePassword();
     }
 
+    // Daily Planner
     if (lower.includes("plan day") || lower.includes("add plan")) {
         const planMatch = message.match(/(?:plan day|add plan):?\s*(.+)/i);
         if (planMatch && planMatch[1]) {
@@ -1195,11 +1374,11 @@ function getResponse(message) {
             return "❌ Please specify plan item. Example: 'Plan day: Study 2 hours'";
         }
     }
-
     if (lower.includes("show plan") || lower.includes("view plan") || lower.includes("daily plan")) {
         return showDailyPlan();
     }
 
+    // Health Tracker
     if (lower.includes("log water") || lower.includes("log health")) {
         const healthMatch = message.match(/(?:log water|log health):?\s*(.+)/i);
         if (healthMatch && healthMatch[1]) {
@@ -1208,11 +1387,11 @@ function getResponse(message) {
             return "❌ Please specify amount. Example: 'Log water: 500ml'";
         }
     }
-
     if (lower.includes("show health") || lower.includes("view health") || lower.includes("health log")) {
         return showHealthLogs();
     }
 
+    // Flashcard System
     if (lower.includes("add flashcard")) {
         const flashcardMatch = message.match(/add flashcard:?\s*(.+?)\s*[-–—]\s*(.+)/i);
         if (flashcardMatch && flashcardMatch[1] && flashcardMatch[2]) {
@@ -1221,26 +1400,25 @@ function getResponse(message) {
             return "❌ Please specify question and answer. Example: 'Add flashcard: Capital of India - New Delhi'";
         }
     }
-
     if (lower.includes("show flashcards") || lower.includes("view flashcards") || lower.includes("my flashcards")) {
         return showFlashcards();
     }
 
+    // Quiz (Updated to handle more questions and flexible answers)
     const quizTriggers = [
         "let's play quiz", "play quiz", "start quiz", "quiz time", "quiz",
         "i want to play quiz", "take a quiz", "give me a quiz"
     ];
-
     if (quizTriggers.some(trigger => lower === trigger)) {
         quizActive = true;
         quizScore = 0;
         quizIndex = 0;
-        quizQuestions = [...gkQuiz].sort(() => 0.5 - Math.random()).slice(0, 10);
-        addMessage("🎯 Quiz Started! 10 questions, 10 seconds each. Let's begin!", false);
+        // Shuffle and select up to 5 questions (or all if less)
+        quizQuestions = [...gkQuiz].sort(() => 0.5 - Math.random()).slice(0, Math.min(5, gkQuiz.length));
+        addMessage("🎯 Quiz Started! Get ready for some questions. Let's begin!", false);
         showNextQuestion();
         return;
     }
-
     if (["exit quiz", "stop quiz", "quit quiz", "end quiz", "leave quiz", "Exit"].includes(lower)) {
         if (quizActive) {
             quizActive = false;
@@ -1250,28 +1428,28 @@ function getResponse(message) {
             return "No quiz is active right now.";
         }
     }
-
     if (quizActive) {
+        const q = quizQuestions[quizIndex];
         const ans = message.trim().toUpperCase();
-        const correct = quizQuestions[quizIndex].answer;
+        const correct = q.answer;
 
         clearQuizTimer();
 
+        // Check if the answer is correct (letter, number, or text)
         const isCorrect =
-            ans === correct ||
-            ans === (correct.charCodeAt(0) - 64).toString();
+            ans === correct || // Exact letter match
+            ans === correct.split(')')[1].trim().toUpperCase() || // Text match (e.g., "NEW DELHI")
+            ans === (correct.charCodeAt(0) - 64).toString(); // Number match (1, 2, 3, 4)
 
         if (isCorrect) {
             quizScore++;
             addMessage("✅ Correct!", false);
             playCorrectSound();
         } else {
-            addMessage(`❌ Wrong! Correct answer was: ${correct}`, false);
+            addMessage(`❌ Wrong! Correct answer was: ${correct} (${q.options.find(o => o.startsWith(correct))?.split(')')[1]?.trim()})`, false);
             playWrongSound();
         }
-
         quizIndex++;
-
         if (quizIndex < quizQuestions.length) {
             showNextQuestion();
         } else {
@@ -1280,6 +1458,7 @@ function getResponse(message) {
         return;
     }
 
+    // Rock Paper Scissors
     const rpsTriggers = [
         "rps", "rock paper scissors", "play rps", "lets play game", "game",
         "play game", "lets play rps", "play rock paper scissors"
@@ -1290,7 +1469,6 @@ function getResponse(message) {
         rpsBotScore = 0;
         return `🎮 Let's play Rock-Paper-Scissors! Score: You ${rpsUserScore} - Ghost ${rpsBotScore}<br>Choose: <strong>Rock</strong>, <strong>Paper</strong>, or <strong>Scissors</strong>. Type "exit" to quit.`;
     }
-
     if (rpsGameActive) {
         if (["exit", "quit", "stop"].includes(lower)) {
             rpsGameActive = false;
@@ -1299,15 +1477,12 @@ function getResponse(message) {
             rpsBotScore = 0;
             return finalScore;
         }
-
         const userChoice = lower.trim();
         const choices = ["rock", "paper", "scissors"];
         const botChoice = choices[Math.floor(Math.random() * 3)];
-
         if (!choices.includes(userChoice)) {
             return "❌ Invalid choice! Choose: Rock, Paper, or Scissors. Type 'exit' to quit.";
         }
-
         let result;
         if (userChoice === botChoice) {
             result = "It's a tie!";
@@ -1322,10 +1497,10 @@ function getResponse(message) {
             rpsBotScore++;
             result = "You lose! 😢";
         }
-
         return `You: ${userChoice.toUpperCase()}<br>Ghost: ${botChoice.toUpperCase()}<br><br>👉 ${result}<br>Score: You ${rpsUserScore} - Ghost ${rpsBotScore}<br>Play again: Choose Rock, Paper, or Scissors. Type 'exit' to quit.`;
     }
 
+    // Daily Conversations
     if (dailyConversations.greetings.some(g => lower.includes(g))) {
         const greetings = [
             "Hi there! I'm Ghost, your AI assistant. How can I help you today?",
@@ -1335,7 +1510,6 @@ function getResponse(message) {
         ];
         return greetings[Math.floor(Math.random() * greetings.length)];
     }
-
     if (dailyConversations.howAreYou.some(q => lower.includes(q))) {
         const responses = [
             "I'm doing great, thanks! How about you?",
@@ -1345,27 +1519,23 @@ function getResponse(message) {
         ];
         return responses[Math.floor(Math.random() * responses.length)];
     }
-
     if (dailyConversations.yourName.some(q => lower.includes(q))) {
         return "I'm Ghost — your ai companion! ";
     }
-
     if (dailyConversations.owner.some(q => lower.includes(q))) {
         return "I'm Ghost — Made By Arpit Pandey!";
     }
-
     if (dailyConversations.myName.some(q => lower.includes(q))) {
         return "Your Name Is Arpit";
     }
-
     if (dailyConversations.time.some(q => lower.includes(q))) {
         return `The current time is ${new Date().toLocaleTimeString()}.`;
     }
-
     if (dailyConversations.date.some(q => lower.includes(q))) {
         return `Today is ${new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.`;
     }
 
+    // Math calculations
     if (lower.includes("what is") || lower.includes("solve") || lower.includes("calculate") || lower.includes("=")) {
         const mathRegex = /^([+\-]?(?:\d+\.?\d*|\.\d+)(?:[+\-*/](?:\d+\.?\d*|\.\d+))*)$/;
         const cleanExpr = message.replace(/what is|solve|calculate|=/gi, "").trim();
@@ -1386,14 +1556,13 @@ function getResponse(message) {
         }
     }
 
+    // Reminders
     if (lower.includes("remind me") || lower.includes("set reminder") || lower.includes("alert me in") || lower.includes("notify me") || lower.includes("add reminder")) {
         const remindMatch1 = lower.match(/remind me to (.+?) in (\d+) (seconds?|minutes?|hours?)/);
         const remindMatch2 = lower.match(/set a reminder for (\d+) (seconds?|minutes?|hours?)(?: to (.+?))?$/);
         const remindMatch3 = lower.match(/in (\d+) (seconds?|minutes?) remind me to (.+?)(?:$|\.)/);
-
         if (remindMatch1 || remindMatch2 || remindMatch3) {
             let task, timeValue, unit;
-
             if (remindMatch1) {
                 [_, task, timeValue, unit] = remindMatch1;
             } else if (remindMatch2) {
@@ -1401,20 +1570,16 @@ function getResponse(message) {
             } else if (remindMatch3) {
                 [_, timeValue, unit, task] = remindMatch3;
             }
-
             task = task?.trim() || null;
             if (!task) {
                 awaitingReminderInput = true;
                 return "🔔 For What you'd like to set a reminder ?";
             }
-
             const value = parseInt(timeValue);
             let ms;
-
             if (unit.startsWith("sec")) ms = value * 1000;
             else if (unit.startsWith("min")) ms = value * 60000;
             else if (unit.startsWith("hour")) ms = value * 3600000;
-
             const timerId = setTimeout(() => {
                 const notificationMsg = `🔔 Reminder: ${task}`;
                 addMessage(notificationMsg, false);
@@ -1425,17 +1590,15 @@ function getResponse(message) {
                     new Notification("Ghost Reminder", { body: task });
                 }
             }, ms);
-
             activeReminders.push(timerId);
-
             const displayUnit = unit.startsWith("hour") ? "hour" : unit;
             return `✅ I'll remind you to "${task}" in ${value} ${displayUnit}${value !== 1 ? 's' : ''}.`;
         }
-
         awaitingReminderInput = true;
         return "🔔 What is the reminder you'd like to set?";
     }
 
+    // To-Do List (Expanded triggers)
     if (lower.startsWith("add:") ||
         lower.includes("add task") ||
         lower.includes("create task") ||
@@ -1447,26 +1610,23 @@ function getResponse(message) {
             message.match(/add:(.+)/i);
         let task = taskMatch ? taskMatch[1].trim() :
             message.replace(/add task|create task|add new task|create new task|make a task|add a task/gi, "").trim();
-
         if (!task || lower.trim() === "add task" || lower.trim() === "add a task") {
             awaitingTaskInput = true;
             return "📝 What task should I add?";
         }
-
         const tasks = getTasks();
         tasks.push({ text: task, time: new Date().toLocaleString() });
         saveTasks(tasks);
         return `✅ Task added: "${task}"`;
     }
-
     if (lower.includes("show tasks") ||
         lower.includes("my tasks") ||
         lower.includes("todo") ||
         lower.includes("list tasks") ||
-        lower.includes("view tasks")) {
+        lower.includes("view tasks") ||
+        lower.includes("tasks")) { // <-- ADDED: 'tasks' trigger
         const tasks = getTasks();
         if (tasks.length === 0) return "📋 No tasks yet. Use 'Add: Task name' to add one.";
-
         let table = `
             <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px;">
                 <tr style="background: #2d2d2d; color: white;">
@@ -1475,7 +1635,6 @@ function getResponse(message) {
                     <th style="text-align: left;">Added On</th>
                 </tr>
         `;
-
         tasks.forEach((task, i) => {
             table += `
                 <tr style="background: #1e1e1e; border-bottom: 1px solid #3a3a3a;">
@@ -1485,11 +1644,11 @@ function getResponse(message) {
                 </tr>
             `;
         });
-
         table += `</table>`;
         return table;
     }
 
+    // Notes
     if (lower.startsWith("note:") ||
         lower.startsWith("save:") ||
         lower.includes("save note") ||
@@ -1502,7 +1661,6 @@ function getResponse(message) {
         localStorage.setItem("ghostNotes", JSON.stringify(notes));
         return `📝 Note saved: "${note}"`;
     }
-
     if (lower.includes("my notes") ||
         lower.includes("saved notes") ||
         lower.includes("view notes") ||
@@ -1512,6 +1670,7 @@ function getResponse(message) {
         return "📒 Your notes:<br>" + notes.map(n => `• "${n.text}" <small>(${n.time})</small>`).join("<br>");
     }
 
+    // BMI Calculator
     if (lower.includes("weight") && lower.includes("height") || lower.includes("bmi") || lower.includes("body mass index")) {
         const weightMatch = lower.match(/weight.*?(\d+(\.\d+)?)/i);
         const heightMatch = lower.match(/height.*?(\d+(\.\d+)?)/i);
@@ -1525,23 +1684,67 @@ function getResponse(message) {
         }
     }
 
+    // YouTube Music
     if (lower.includes("play") && (lower.includes("youtube") || lower.includes("song") || lower.includes("music") || lower.includes("listen to"))) {
         const queryMatch = message.match(/play (.+?) on youtube/i);
         const songName = queryMatch ? queryMatch[1] : message.replace(/play|song|music|listen to|on youtube/gi, "").trim();
-
         if (songName.trim()) {
             setTimeout(() => playOnYouTube(songName), 500);
             return `🎵 Playing "${songName}" on YouTube...`;
         }
     }
 
+    // Currency Converter (Enhanced)
+    const currencyTriggers = ["usd", "inr", "eur", "gbp", "jpy", "cad", "aud", "chf", "cny", "sek", "nzd", "mxn", "sgd", "hkd", "nok", "krw", "try", "rub", "brl", "zar", "rs", "$", "€", "£", "¥"];
+    if (currencyTriggers.some(trigger => lower.includes(trigger))) {
+        const currencyRegex = /(\d+(?:\.\d+)?)\s*([a-zA-Z$€£¥]{3,4}|rs)\s*(?:in|to)\s*([a-zA-Z$€£¥]{3,4}|rs)/i;
+        const match = message.match(currencyRegex);
+        if (match) {
+            const amount = parseFloat(match[1]);
+            let fromCurrency = match[2].toLowerCase();
+            let toCurrency = match[3].toLowerCase();
+
+            // Symbol to code mapping
+            const symbolMap = {
+                '$': 'usd', '€': 'eur', '£': 'gbp', '¥': 'jpy', 'rs': 'inr'
+            };
+
+            fromCurrency = symbolMap[fromCurrency] || fromCurrency;
+            toCurrency = symbolMap[toCurrency] || toCurrency;
+
+            // Simple hardcoded exchange rates (for demonstration, replace with API call)
+            const exchangeRates = {
+                'usd': 1, 'inr': 83, 'eur': 0.93, 'gbp': 0.79, 'jpy': 151.5
+            };
+
+            if (exchangeRates[fromCurrency] && exchangeRates[toCurrency]) {
+                const rate = exchangeRates[toCurrency] / exchangeRates[fromCurrency];
+                const convertedAmount = (amount * rate).toFixed(2);
+                return `💱 ${amount} ${fromCurrency.toUpperCase()} = ${convertedAmount} ${toCurrency.toUpperCase()}`;
+            } else {
+                return "❌ Sorry, I don't support that currency conversion right now.";
+            }
+        }
+    }
+
+    // QR Code Generator (Placeholder - needs implementation)
+    if (lower.includes("generate qr") || lower.includes("qr code")) {
+        const qrMatch = message.match(/generate qr.*?['"](.+?)['"]/i);
+        if (qrMatch && qrMatch[1]) {
+            // Placeholder for QR generation logic
+            return `🖼️ Generating QR code for: "${qrMatch[1]}". (QR generation logic needs to be implemented)`;
+        } else {
+            return "❌ Please specify text for the QR code. Example: 'Generate QR for Hello World'";
+        }
+    }
+
+    // Default response (improved)
     const defaultResponses = [
-        "I'm here to help! Try asking 'what can you do' to see my features.",
+        "I'm still learning, but I'll get there soon! Try asking 'what can you do' to see my features.",
         "I can help you with many things! Ask me about math, time, tasks, or just chat!",
         "I'm your AI assistant! What would you like to know?",
         "I'm ready to help! Try asking me to calculate something or set a reminder."
     ];
-
     return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
 }
 
@@ -1553,6 +1756,11 @@ function sendMessage() {
     addMessage(message, true);
     userInput.value = "";
     showTyping();
+
+    // Check for multi-command
+    if (processMultiCommand(message)) {
+        return; // Multi-command processing will handle responses
+    }
 
     setTimeout(() => {
         const response = getResponse(message);
@@ -1623,7 +1831,6 @@ document.addEventListener("click", () => {
     if (synth.getVoices().length === 0) {
         synth.getVoices();
     }
-
     if (!window.chatHistoryLoaded) {
         loadChatHistory();
         window.chatHistoryLoaded = true;
