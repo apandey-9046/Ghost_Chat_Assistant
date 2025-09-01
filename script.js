@@ -74,7 +74,7 @@ function loadChatHistory() {
             const timeStr = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
             messageDiv.innerHTML = `
-                <div class="message-sender">${msg.isUser ? "You" : "Ghost"}</div>
+                <div class="message-sender">${msg.isUser ? "Ghost" : "Ghost"}</div>
                 <div class="message-bubble">${msg.content}</div>
                 <div class="message-time">${timeStr}</div>
             `;
@@ -129,7 +129,7 @@ function detectPlatform() {
     return 'default';
 }
 
-// Function to get the preferred voice based on platform and selection
+// Modified: Improved voice fallback for mobile devices
 function getPreferredVoice() {
     const voices = synth.getVoices();
     const platform = detectPlatform();
@@ -143,8 +143,9 @@ function getPreferredVoice() {
 
     const selectedVoice = voices.find(v => v.name === currentVoiceName);
     if (!selectedVoice) {
-        console.warn(`Voice "${currentVoiceName}" not found, falling back to default`);
-        return voices.find(v => v.lang.startsWith('en-')) || voices[0];
+        console.warn(`Voice "${currentVoiceName}" not found, falling back to any English voice`);
+        // Fallback to any en-US voice or first available voice
+        return voices.find(v => v.lang === 'en-US') || voices[0] || null;
     }
     return selectedVoice;
 }
@@ -190,8 +191,13 @@ function speak(text) {
 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
     const selectedVoice = getPreferredVoice();
+    if (!selectedVoice) {
+        console.error("No voice available for speech synthesis");
+        isSpeaking = false;
+        return;
+    }
     utterance.voice = selectedVoice;
-    console.log("Selected voice:", selectedVoice?.name); // Debug voice selection
+    console.log("Selected voice:", selectedVoice.name); // Debug voice selection
     utterance.rate = 0.95; // Slightly slower for natural feel
     utterance.pitch = 1.1; // Slightly higher for clarity
     utterance.volume = 1;
@@ -258,15 +264,17 @@ function listVoices() {
     return `Available voices: ${voiceList.map(v => v.name).join(', ')}. Note: Voice availability depends on your device and browser.`;
 }
 
-// Speech recognition setup and variables
+// Modified: Speech recognition setup with extended timeout and sensitivity
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition;
 let isMicOn = false;
+let recognitionStartTime = null;
+let noSpeechTimeout = null;
 
 if (SpeechRecognition) {
     recognition = new SpeechRecognition();
     recognition.lang = 'en-US';
-    recognition.interimResults = false;
+    recognition.interimResults = true; // Changed: Enable interim results for slower speech
     recognition.maxAlternatives = 1;
     recognition.continuous = false;
 
@@ -276,10 +284,24 @@ if (SpeechRecognition) {
         if (isMicOn) {
             try {
                 recognition.start();
+                recognitionStartTime = Date.now();
                 micButton.innerHTML = "🔴";
                 micButton.style.color = "#ff4757";
                 userInput.placeholder = "Listening... (Click mic to stop)";
                 userInput.disabled = true;
+
+                // New: Set 10-second timeout for no speech
+                noSpeechTimeout = setTimeout(() => {
+                    if (isMicOn) {
+                        recognition.stop();
+                        addMessage("❌ No speech detected. Mic stopped.", false);
+                        isMicOn = false;
+                        micButton.innerHTML = "🎤";
+                        micButton.style.color = "#aebac1";
+                        userInput.placeholder = "Type or click mic to speak...";
+                        userInput.disabled = false;
+                    }
+                }, 10000); // 10 seconds timeout
             } catch (e) {
                 isMicOn = false;
                 micButton.innerHTML = "🎤";
@@ -290,6 +312,7 @@ if (SpeechRecognition) {
         } else {
             try {
                 recognition.stop();
+                clearTimeout(noSpeechTimeout);
             } catch (e) {
                 console.log("Recognition already stopped");
             }
@@ -308,12 +331,13 @@ if (SpeechRecognition) {
             .trim();
 
         if (transcript) {
+            clearTimeout(noSpeechTimeout); // Clear timeout if speech detected
             userInput.value = transcript;
             setTimeout(() => {
-                if (isMicOn) {
+                if (isMicOn && e.results[0].isFinal) { // Only send on final result
                     sendMessage();
                 }
-            }, 500);
+            }, 1000); // Changed: Increased delay for slower speech
         }
     });
 
@@ -323,6 +347,19 @@ if (SpeechRecognition) {
                 if (isMicOn && !isSpeaking) {
                     try {
                         recognition.start();
+                        recognitionStartTime = Date.now();
+                        // New: Reset no-speech timeout
+                        noSpeechTimeout = setTimeout(() => {
+                            if (isMicOn) {
+                                recognition.stop();
+                                addMessage("❌ No speech detected. Mic stopped.", false);
+                                isMicOn = false;
+                                micButton.innerHTML = "🎤";
+                                micButton.style.color = "#aebac1";
+                                userInput.placeholder = "Type or click mic to speak...";
+                                userInput.disabled = false;
+                            }
+                        }, 10000);
                     } catch (e) {
                         console.log("Could not restart recognition");
                     }
@@ -330,6 +367,7 @@ if (SpeechRecognition) {
             }, 500);
         } else {
             if (!isSpeaking) {
+                clearTimeout(noSpeechTimeout);
                 micButton.innerHTML = "🎤";
                 micButton.style.color = "#aebac1";
                 userInput.placeholder = "Type or click mic to speak...";
@@ -340,9 +378,10 @@ if (SpeechRecognition) {
 
     recognition.addEventListener("error", (event) => {
         console.error("Speech recognition error:", event.error);
-        if (isMicOn && event.error !== 'no-speech') {
+        if (isMicOn && event.error !== 'no-speech') { // Modified: Ignore no-speech errors handled by timeout
             addMessage(`❌ Mic error: ${event.error}`, false);
             isMicOn = false;
+            clearTimeout(noSpeechTimeout);
             micButton.innerHTML = "🎤";
             micButton.style.color = "#aebac1";
             userInput.disabled = false;
@@ -1326,7 +1365,7 @@ function getResponse(message) {
     }
 
     if (dailyConversations.yourName.some(q => lower.includes(q))) {
-        return "I'm Ghost — An Ai Assistant! ";
+        return "I'm Ghost — your ai companion! ";
     }
 
     if (dailyConversations.owner.some(q => lower.includes(q))) {
@@ -1334,7 +1373,7 @@ function getResponse(message) {
     }
 
     if (dailyConversations.myName.some(q => lower.includes(q))) {
-        return "Your Name Is Arpit!";
+        return "Your Name Is Arpit";
     }
 
     if (dailyConversations.time.some(q => lower.includes(q))) {
@@ -1384,7 +1423,7 @@ function getResponse(message) {
             task = task?.trim() || null;
             if (!task) {
                 awaitingReminderInput = true;
-                return "🔔 For What is the reminder you'd like to set?";
+                return "🔔 For What you'd like to set a reminder ?";
             }
 
             const value = parseInt(timeValue);
@@ -1412,22 +1451,23 @@ function getResponse(message) {
         }
 
         awaitingReminderInput = true;
-        return "🔔 For What is the reminder you'd like to set?";
+        return "🔔 What is the reminder you'd like to set?";
     }
 
     if (lower.startsWith("add:") ||
         lower.includes("add task") ||
+        lower.includes("add another") ||
         lower.includes("create task") ||
         lower.includes("add new task") ||
         lower.includes("create new task") ||
         lower.includes("make a task") ||
         lower.includes("add a task")) {
-        const taskMatch = message.match(/(?:add task|create task|add new task|create new task|make a task|add a task):?\s*(.+)/i) ||
+        const taskMatch = message.match(/(?:add task|create task|add new task|create new task|make a task|add a task| add another):?\s*(.+)/i) ||
             message.match(/add:(.+)/i);
         let task = taskMatch ? taskMatch[1].trim() :
-            message.replace(/add task|create task|add new task|create new task|make a task|add a task/gi, "").trim();
+            message.replace(/add task|create task|add new task|create new task|make a task|add another|add a task/gi, "").trim();
 
-        if (!task || lower.trim() === "add task" || lower.trim() === "add a task") {
+        if (!task || lower.trim() === "add task" || lower.trim() === "add another" || lower.trim() === "add a task") {
             awaitingTaskInput = true;
             return "📝 What task should I add?";
         }
@@ -1561,14 +1601,24 @@ if (voiceButton) {
     });
 }
 
+// Modified: Enhanced safeSpeak for mobile compatibility
 function safeSpeak(text) {
     if (voiceEnabled && text) {
+        // Force voice loading for mobile browsers
+        synth.getVoices();
         const voices = synth.getVoices();
         if (voices.length === 0) {
             console.warn("No voices loaded yet, retrying...");
-            setTimeout(() => safeSpeak(text), 500); // Retry after 500ms
+            // New: Increased retry delay for mobile devices
+            setTimeout(() => safeSpeak(text), 1000);
             return;
         }
+        if (!getPreferredVoice()) {
+            console.error("No voices available after retries.");
+            addMessage("❌ No voices available for speech output.", false);
+            return;
+        }
+        console.log("Speaking text:", text); // New: Debug log for voice output
         speak(text);
     }
 }
