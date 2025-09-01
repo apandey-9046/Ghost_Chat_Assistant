@@ -1627,7 +1627,6 @@ document.addEventListener("click", () => {
     if (!window.chatHistoryLoaded) {
         loadChatHistory();
         window.chatHistoryLoaded = true;
-
         if (chatArea.children.length <= 1) {
             const welcomeMsg = "Hello! I'm Ghost, How can I help you today?";
             addMessage(welcomeMsg, false);
