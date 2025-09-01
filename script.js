@@ -2244,7 +2244,7 @@ function playSound(frequency, type, duration = 150, volume = 0.5) {
     oscillator.start();
     gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration / 1000);
     oscillator.stop(audioContext.currentTime + duration / 1000);
-}
+}return `✅ Expense added: ₹${amount} for ${description} (${category}, ${mode}) …`;return `✅ Expense added: ₹${amount} for ${description} (${category}, ${mode}) …`;
 
 // Function to play correct answer sound
 function playCorrectSound() {
