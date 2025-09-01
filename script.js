@@ -1,4 +1,4 @@
-// DOM Elements
+// Global DOM elements for the chat interface
 const chatArea = document.getElementById("chatArea");
 const userInput = document.getElementById("userInput");
 const sendButton = document.getElementById("sendButton");
@@ -6,19 +6,18 @@ const micButton = document.getElementById("micButton");
 const voiceButton = document.getElementById("voiceButton");
 const typingIndicator = document.getElementById("typingIndicator");
 
-// === PROMPT SYSTEM VARIABLES ===
-// Add these global variables for the prompt system
+// Global variables for prompt system handling
 let awaitingTaskInput = false;
 let awaitingReminderInput = false;
 let awaitingReminderTime = false;
 let tempReminderText = "";
 
-// Check if required elements exist
+// Check for required DOM elements and log error if missing
 if (!chatArea || !userInput || !sendButton || !micButton) {
     console.error("Chat elements not found. Check your HTML IDs.");
 }
 
-// Show typing indicator
+// Function to display typing indicator in chat area
 function showTyping() {
     if (typingIndicator) {
         typingIndicator.style.display = "block";
@@ -26,14 +25,14 @@ function showTyping() {
     }
 }
 
-// Hide typing indicator
+// Function to hide typing indicator from chat area
 function hideTyping() {
     if (typingIndicator) {
         typingIndicator.style.display = "none";
     }
 }
 
-// Add message to chat (also saves to history)
+// Function to add a message to the chat area and save to history
 function addMessage(content, isUser) {
     const messageDiv = document.createElement("div");
     messageDiv.className = isUser ? "message user-message" : "message ghost-message";
@@ -51,7 +50,7 @@ function addMessage(content, isUser) {
     chatArea.scrollTop = chatArea.scrollHeight;
     hideTyping();
 
-    // Save to localStorage (chat history) - debounced
+    // Debounced saving of chat history to localStorage
     if (window.saveHistoryTimeout) {
         clearTimeout(window.saveHistoryTimeout);
     }
@@ -62,7 +61,7 @@ function addMessage(content, isUser) {
     }, 100);
 }
 
-// Load chat history on page load - with error handling
+// Function to load chat history from localStorage with error handling
 function loadChatHistory() {
     try {
         const history = JSON.parse(localStorage.getItem("ghostChatHistory") || "[]");
@@ -89,67 +88,187 @@ function loadChatHistory() {
     }
 }
 
-// Text-to-Speech with ORIGINAL Voice Selection (as you preferred)
+// Speech synthesis setup and variables
 const synth = window.speechSynthesis;
 let isSpeaking = false;
 
-// ORIGINAL voice function - your preferred one
-function getIndianMaleVoice() {
+// Platform-specific voices for offline use
+const platformVoices = {
+    windows: [
+        { name: 'David', voiceName: 'Microsoft David Desktop', gender: 'male' },
+        { name: 'Zira', voiceName: 'Microsoft Zira Desktop', gender: 'female' }
+    ],
+    macos: [
+        { name: 'Alex', voiceName: 'Alex', gender: 'male' },
+        { name: 'Samantha', voiceName: 'Samantha', gender: 'female' }
+    ],
+    android: [
+        { name: 'Google Male', voiceName: 'en-US-Standard-D', gender: 'male' },
+        { name: 'Google Female', voiceName: 'en-US-Standard-C', gender: 'female' }
+    ],
+    ios: [
+        { name: 'Siri Male', voiceName: 'Siri Male (English (United States))', gender: 'male' },
+        { name: 'Siri Female', voiceName: 'Siri Female (English (United States))', gender: 'female' }
+    ],
+    default: [
+        { name: 'Default Male', voiceName: 'en-US-Standard-D', gender: 'male' },
+        { name: 'Default Female', voiceName: 'en-US-Standard-C', gender: 'female' }
+    ]
+};
+
+let availableVoices = [];
+let currentVoiceName = '';
+
+// Function to detect platform based on user agent
+function detectPlatform() {
+    const userAgent = navigator.userAgent.toLowerCase();
+    if (userAgent.includes('windows')) return 'windows';
+    if (userAgent.includes('macintosh')) return 'macos';
+    if (userAgent.includes('android')) return 'android';
+    if (userAgent.includes('iphone') || userAgent.includes('ipad')) return 'ios';
+    return 'default';
+}
+
+// Function to get the preferred voice based on platform and selection
+function getPreferredVoice() {
     const voices = synth.getVoices();
-    const indianMale = voices.find(v =>
-        v.lang === 'en-IN' &&
-        (v.name.toLowerCase().includes('ravi') || v.name.toLowerCase().includes('google'))
-    );
-    const enMale = voices.find(v =>
-        v.lang.startsWith('en') &&
-        !v.name.toLowerCase().includes('female') &&
-        !v.name.toLowerCase().includes('priya')
-    );
-    return indianMale || enMale || voices.find(v => v.lang.startsWith('en')) || voices[0];
+    const platform = detectPlatform();
+    const platformVoiceList = platformVoices[platform] || platformVoices.default;
+
+    availableVoices = platformVoiceList.map(v => v.name);
+
+    if (!currentVoiceName) {
+        currentVoiceName = platformVoiceList[0].voiceName;
+    }
+
+    const selectedVoice = voices.find(v => v.name === currentVoiceName);
+    if (!selectedVoice) {
+        console.warn(`Voice "${currentVoiceName}" not found, falling back to default`);
+        return voices.find(v => v.lang.startsWith('en-')) || voices[0];
+    }
+    return selectedVoice;
 }
 
 // Load voices when available
 synth.onvoiceschanged = () => {
-    console.log("Speech voices loaded:", synth.getVoices().map(v => v.name));
+    const voices = synth.getVoices();
+    console.log("Available voices:", voices.map(v => ({
+        name: v.name,
+        lang: v.lang,
+        default: v.default
+    })));
+    if (!currentVoiceName) {
+        const platform = detectPlatform();
+        currentVoiceName = (platformVoices[platform] || platformVoices.default)[0].voiceName;
+    }
 };
 
-// Remove emojis and clean text
+// Function to remove emojis from text
 function removeEmojis(text) {
     const emojiRegex = /([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDD00-\uDDFF]|[\u2000-\u2FFF]|\u00A9|\u00AE|[\u2100-\u214F]|[\u2190-\u21FF]|\u231A|\u231B|\u23E9-\u23EF|\u23F0|\u23F1|\u23F2|\u23F3|\u23F8-\u23FA]|\u24C2|\u25AA|\u25AB|\u25B6|\u25C0|\u25FB-\u25FE]|\u2600-\u26FF]|\u2614|\u2615|\u2648-\u2653]|\u267F|\u2693|\u26A0|\u26A1|\u26AA|\u26AB|\u26BD|\u26BE|\u26C4|\u26C5|\u26CE|\u26CF|\u26D1|\u26D3|\u26D4|\u26E9|\u26EA|\u26F0-\u26FF]|\u2702|\u2705|\u2708-\u270D]|\u270F|\u2712|\u2714|\u2716|\u271D|\u2721|\u2728|\u2733|\u2734|\u2744|\u2747|\u274C|\u274E|\u2753-\u2755]|\u2757|\u2763|\u2764|\u2795-\u2797]|\u27A1|\u27B0|\u27BF|\u2934|\u2935|\u2B05-\u2B07]|\u2B1B|\u2B1C|\u2B50|\u2B55|\u3030|\u303D|\u3297|\u3299]|[\u00A0-\u00FF]|\u2000-\u206F]|\u2122|\u2139|\u3000-\u303F]|[\uD800-\uDBFF][\uDC00-\uDFFF])/g;
     return text.replace(emojiRegex, '').trim();
 }
 
-// ORIGINAL speak function
+// Function to strip HTML tags from text
+function stripHtml(html) {
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = html;
+    return tempDiv.textContent || tempDiv.innerText || "";
+}
+
+// Function to speak text using speech synthesis
 function speak(text) {
-    if (isSpeaking) synth.cancel();
+    if (isSpeaking || !voiceEnabled) return;
+    synth.cancel(); // Cancel any ongoing speech
+    isSpeaking = true;
 
-    const cleanText = removeEmojis(text);
-    if (!cleanText) return;
+    const textToSpeak = stripHtml(removeEmojis(text));
+    if (!textToSpeak) {
+        isSpeaking = false;
+        return;
+    }
 
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.voice = getIndianMaleVoice(); // ORIGINAL VOICE
-    utterance.rate = 0.9;
-    utterance.pitch = 1.05;
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    const selectedVoice = getPreferredVoice();
+    utterance.voice = selectedVoice;
+    console.log("Selected voice:", selectedVoice?.name); // Debug voice selection
+    utterance.rate = 0.95; // Slightly slower for natural feel
+    utterance.pitch = 1.1; // Slightly higher for clarity
     utterance.volume = 1;
 
-    utterance.onstart = () => isSpeaking = true;
-    utterance.onend = () => isSpeaking = false;
-    utterance.onerror = () => isSpeaking = false;
+    utterance.onstart = () => {
+        isSpeaking = true;
+        if (isMicOn) recognition.stop();
+    };
+
+    utterance.onend = () => {
+        isSpeaking = false;
+        if (isMicOn) {
+            setTimeout(() => {
+                if (isMicOn && !isSpeaking) {
+                    try {
+                        recognition.start();
+                    } catch (e) {
+                        console.log("Could not restart recognition after speech.");
+                    }
+                }
+            }, 500);
+        }
+    };
+
+    utterance.onerror = (e) => {
+        console.error("Speech synthesis error:", e);
+        isSpeaking = false;
+        if (isMicOn) {
+            setTimeout(() => {
+                if (isMicOn && !isSpeaking) {
+                    try {
+                        recognition.start();
+                    } catch (err) {
+                        console.log("Could not restart recognition after speech error.");
+                    }
+                }
+            }, 500);
+        }
+    };
 
     synth.speak(utterance);
 }
 
-// Speech Recognition with Improved Accuracy
+// Function to switch voice
+function switchVoice(voiceName) {
+    const platform = detectPlatform();
+    const voiceList = platformVoices[platform] || platformVoices.default;
+    const voice = voiceList.find(v => v.name.toLowerCase() === voiceName.toLowerCase());
+    if (voice) {
+        currentVoiceName = voice.voiceName;
+        const sampleText = "This is a sample in the new voice.";
+        console.log(`Switching to voice: ${voice.name} (${voice.voiceName})`);
+        addMessage(`🔊 Voice switched to ${voice.name}. Sample: ${sampleText}`, false);
+        safeSpeak(sampleText);
+    } else {
+        addMessage(`❌ Voice "${voiceName}" not available. Use: ${voiceList.map(v => v.name).join(', ')}`, false);
+    }
+}
+
+// Function to list available voices
+function listVoices() {
+    const platform = detectPlatform();
+    const voiceList = platformVoices[platform] || platformVoices.default;
+    return `Available voices: ${voiceList.map(v => v.name).join(', ')}. Note: Voice availability depends on your device and browser.`;
+}
+
+// Speech recognition setup and variables
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition;
 let isMicOn = false;
 
 if (SpeechRecognition) {
     recognition = new SpeechRecognition();
-    recognition.lang = 'en-US'; // Changed to en-US for better accuracy
-    recognition.interimResults = false; // Changed to false for better accuracy
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    recognition.continuous = false; // Single recognition per click
+    recognition.continuous = false;
 
     micButton.addEventListener("click", () => {
         isMicOn = !isMicOn;
@@ -190,7 +309,6 @@ if (SpeechRecognition) {
 
         if (transcript) {
             userInput.value = transcript;
-            // Auto-send after recognition
             setTimeout(() => {
                 if (isMicOn) {
                     sendMessage();
@@ -200,28 +318,29 @@ if (SpeechRecognition) {
     });
 
     recognition.addEventListener("end", () => {
-        if (isMicOn) {
-            // Auto-restart for continuous listening
+        if (isMicOn && !isSpeaking) {
             setTimeout(() => {
-                if (isMicOn) {
+                if (isMicOn && !isSpeaking) {
                     try {
                         recognition.start();
                     } catch (e) {
                         console.log("Could not restart recognition");
                     }
                 }
-            }, 100);
+            }, 500);
         } else {
-            micButton.innerHTML = "🎤";
-            micButton.style.color = "#aebac1";
-            userInput.placeholder = "Type or click mic to speak...";
-            userInput.disabled = false;
+            if (!isSpeaking) {
+                micButton.innerHTML = "🎤";
+                micButton.style.color = "#aebac1";
+                userInput.placeholder = "Type or click mic to speak...";
+                userInput.disabled = false;
+            }
         }
     });
 
     recognition.addEventListener("error", (event) => {
         console.error("Speech recognition error:", event.error);
-        if (isMicOn) {
+        if (isMicOn && event.error !== 'no-speech') {
             addMessage(`❌ Mic error: ${event.error}`, false);
             isMicOn = false;
             micButton.innerHTML = "🎤";
@@ -234,7 +353,7 @@ if (SpeechRecognition) {
     micButton.style.display = "none";
 }
 
-// Feature List with new features
+// Feature list HTML for displaying capabilities
 let featureList = `
 ✨ <strong>Here's what I can do:</strong><br><br>
 ✅ <strong>Math Help:</strong> "What is 25 × 17?"<br>
@@ -263,13 +382,14 @@ let featureList = `
 ✅ <strong>Daily Planner:</strong> "Plan day: Study 2 hours", "Show daily plan"<br>
 ✅ <strong>Health Tracker:</strong> "Log water: 500ml", "Show health log"<br>
 ✅ <strong>Flashcard System:</strong> "Add flashcard: Capital of India - New Delhi"<br>
+✅ <strong>Voice Switching:</strong> "Switch voice to David", "List voices" (availability depends on device and browser)<br>
 ✅ <strong>Stop:</strong> Say "Stop" to cancel anything<br><br>
 Just ask me anything! 😊
 `.trim();
 
 const featureVoiceMessage = "Here are the things I can help you with!";
 
-// === GENERAL KNOWLEDGE QUIZ QUESTIONS & ANSWERS (with A/B/C/D options) ===
+// General knowledge quiz questions with options and answers
 const gkQuiz = [
     {
         question: "What is the capital of India?",
@@ -281,115 +401,22 @@ const gkQuiz = [
         options: ["A) Jawaharlal Nehru", "B) Mahatma Gandhi", "C) Subhas Chandra Bose", "D) Sardar Patel"],
         answer: "B"
     },
-    {
-        question: "Which planet is known as the Red Planet?",
-        options: ["A) Venus", "B) Jupiter", "C) Mars", "D) Saturn"],
-        answer: "C"
-    },
-    {
-        question: "What is the largest ocean on Earth?",
-        options: ["A) Indian Ocean", "B) Atlantic Ocean", "C) Arctic Ocean", "D) Pacific Ocean"],
-        answer: "D"
-    },
-    {
-        question: "Which gas do plants absorb from the atmosphere?",
-        options: ["A) Oxygen", "B) Nitrogen", "C) Carbon Dioxide", "D) Hydrogen"],
-        answer: "C"
-    },
-    {
-        question: "What is the chemical symbol for water?",
-        options: ["A) H2O", "B) CO2", "C) O2", "D) NaCl"],
-        answer: "A"
-    },
-    {
-        question: "Which country is known as the Land of the Rising Sun?",
-        options: ["A) China", "B) South Korea", "C) Japan", "D) Thailand"],
-        answer: "C"
-    },
-    {
-        question: "Who wrote the Indian National Anthem?",
-        options: ["A) Rabindranath Tagore", "B) Bankim Chandra Chatterjee", "C) Muhammad Iqbal", "D) Sarojini Naidu"],
-        answer: "A"
-    },
-    {
-        question: "How many continents are there in the world?",
-        options: ["A) 5", "B) 6", "C) 7", "D) 8"],
-        answer: "C"
-    },
-    {
-        question: "What is the longest river in the world?",
-        options: ["A) Amazon", "B) Nile", "C) Yangtze", "D) Mississippi"],
-        answer: "B"
-    }
 ];
 
-// Open YouTube with better search
-function playOnYouTube(query) {
-    const cleanQuery = query.replace(/play|song|music|on youtube/gi, "").trim();
-    const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(cleanQuery)}`;
-    window.open(url, "_blank");
-}
-
-// === TASK MANAGER ===
-function getTasks() {
-    return JSON.parse(localStorage.getItem("ghostTasks") || "[]");
-}
-
-function saveTasks(tasks) {
-    localStorage.setItem("ghostTasks", JSON.stringify(tasks));
-}
-
-// === REMINDER SYSTEM ===
-let activeReminders = [];
-
-// Cancel all reminders
-function cancelAllReminders() {
-    activeReminders.forEach(timerId => clearTimeout(timerId));
-    activeReminders = [];
-    return "✅ All reminders cancelled.";
-}
-
-// === QUIZ SYSTEM (Global Variables) WITH SOUNDS ===
+// Quiz-related variables
 let quizActive = false;
-let quizQuestions = [];
-let quizIndex = 0;
 let quizScore = 0;
-let quizTimer;
+let quizIndex = 0;
+let quizQuestions = [];
+let quizTimer = null;
 
-// Create audio elements for quiz sounds
-const correctSound = new Audio("https://www.soundjay.com/buttons/sounds/button-09.mp3");
-const wrongSound = new Audio("https://www.soundjay.com/buttons/sounds/button-10.mp3");
-
-function playCorrectSound() {
-    try {
-        correctSound.currentTime = 0;
-        correctSound.play().catch(() => { });
-    } catch (e) {
-        console.log("Sound play failed");
-    }
-}
-
-function playWrongSound() {
-    try {
-        wrongSound.currentTime = 0;
-        wrongSound.play().catch(() => { });
-    } catch (e) {
-        console.log("Sound play failed");
-    }
-}
-
-// Clear quiz timer
-function clearQuizTimer() {
-    if (quizTimer) clearTimeout(quizTimer);
-}
-
-// Start quiz timer (10 seconds - original timing)
+// Function to start quiz timer with 10 seconds limit
 function startQuizTimer() {
     clearQuizTimer();
     quizTimer = setTimeout(() => {
         if (quizActive && quizIndex < quizQuestions.length) {
             addMessage(`⏰ Time's up! Correct answer was: ${quizQuestions[quizIndex].answer}`, false);
-            playWrongSound(); // Add sound for timeout
+            playWrongSound();
             quizIndex++;
             if (quizIndex < quizQuestions.length) {
                 showNextQuestion();
@@ -397,10 +424,10 @@ function startQuizTimer() {
                 endQuiz();
             }
         }
-    }, 10000); // Original 10 seconds
+    }, 10000);
 }
 
-// Show next question
+// Function to display the next quiz question
 function showNextQuestion() {
     const q = quizQuestions[quizIndex];
     const optionsText = q.options.join("<br>");
@@ -411,7 +438,12 @@ function showNextQuestion() {
     }, 500);
 }
 
-// End quiz
+// Function to clear the quiz timer
+function clearQuizTimer() {
+    if (quizTimer) clearTimeout(quizTimer);
+}
+
+// Function to end the quiz and display score
 function endQuiz() {
     quizActive = false;
     clearQuizTimer();
@@ -420,20 +452,20 @@ function endQuiz() {
     safeSpeak(`Quiz completed! You scored ${quizScore} out of ${quizQuestions.length}.`);
 }
 
-// === ROCK PAPER SCISSORS GAME - FIXED ===
+// Rock Paper Scissors game variable
 let rpsGameActive = false;
 
-// === NEW FEATURES FUNCTIONS ===
-
-// === HABIT TRACKER ===
+// Function to get habits from localStorage
 function getHabits() {
     return JSON.parse(localStorage.getItem("ghostHabits") || "[]");
 }
 
+// Function to save habits to localStorage
 function saveHabits(habits) {
     localStorage.setItem("ghostHabits", JSON.stringify(habits));
 }
 
+// Function to track a habit for today
 function trackHabit(habitName) {
     const habits = getHabits();
     const today = new Date().toDateString();
@@ -457,6 +489,7 @@ function trackHabit(habitName) {
     return `✅ Habit "${habitName}" tracked for today!`;
 }
 
+// Function to display habits in a table
 function showHabits() {
     const habits = getHabits();
     if (habits.length === 0) {
@@ -489,15 +522,17 @@ function showHabits() {
     return table;
 }
 
-// === EXPENSE MANAGER ===
+// Function to get expenses from localStorage
 function getExpenses() {
     return JSON.parse(localStorage.getItem("ghostExpenses") || "[]");
 }
 
+// Function to save expenses to localStorage
 function saveExpenses(expenses) {
     localStorage.setItem("ghostExpenses", JSON.stringify(expenses));
 }
 
+// Function to add an expense entry
 function addExpense(amount, description) {
     const expenses = getExpenses();
     const expense = {
@@ -508,11 +543,11 @@ function addExpense(amount, description) {
     expenses.push(expense);
     saveExpenses(expenses);
 
-    // Calculate total
     const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
     return `✅ Expense added: ₹${amount} for ${description}<br>📊 Total spent: ₹${total.toFixed(2)}`;
 }
 
+// Function to display expenses in a table
 function showExpenses() {
     const expenses = getExpenses();
     if (expenses.length === 0) {
@@ -550,16 +585,17 @@ function showExpenses() {
     return table;
 }
 
-// === STUDY TIMER (POMODORO) ===
+// Pomodoro timer variables
 let pomodoroTimer = null;
 let pomodoroTimeLeft = 0;
 
+// Function to start a pomodoro study timer
 function startPomodoro(minutes = 25) {
     if (pomodoroTimer) {
         clearTimeout(pomodoroTimer);
     }
 
-    pomodoroTimeLeft = minutes * 60; // Convert to seconds
+    pomodoroTimeLeft = minutes * 60;
     const endTime = new Date(Date.now() + pomodoroTimeLeft * 1000);
 
     function updateTimer() {
@@ -580,15 +616,17 @@ function startPomodoro(minutes = 25) {
     return `⏱️ Pomodoro timer started for ${minutes} minutes!`;
 }
 
-// === MOOD JOURNAL ===
+// Function to get mood logs from localStorage
 function getMoods() {
     return JSON.parse(localStorage.getItem("ghostMoods") || "[]");
 }
 
+// Function to save mood logs to localStorage
 function saveMoods(moods) {
     localStorage.setItem("ghostMoods", JSON.stringify(moods));
 }
 
+// Function to log a mood entry
 function logMood(mood) {
     const moods = getMoods();
     const moodEntry = {
@@ -601,13 +639,13 @@ function logMood(mood) {
     return `😊 Mood "${mood}" logged successfully!`;
 }
 
+// Function to display mood history in a table
 function showMoodHistory() {
     const moods = getMoods();
     if (moods.length === 0) {
         return "🎭 No moods logged yet. Use 'Log mood: Happy' to start!";
     }
 
-    // Sort by date (newest first)
     moods.sort((a, b) => b.timestamp - a.timestamp);
 
     let table = `
@@ -631,15 +669,17 @@ function showMoodHistory() {
     return table;
 }
 
-// === GOAL TRACKER ===
+// Function to get goals from localStorage
 function getGoals() {
     return JSON.parse(localStorage.getItem("ghostGoals") || "[]");
 }
 
+// Function to save goals to localStorage
 function saveGoals(goals) {
     localStorage.setItem("ghostGoals", JSON.stringify(goals));
 }
 
+// Function to set a new goal
 function setGoal(goalText) {
     const goals = getGoals();
     const goal = {
@@ -653,6 +693,7 @@ function setGoal(goalText) {
     return `🎯 Goal set: "${goalText}"`;
 }
 
+// Function to display goals in a table
 function showGoals() {
     const goals = getGoals();
     if (goals.length === 0) {
@@ -683,15 +724,17 @@ function showGoals() {
     return table;
 }
 
-// === CONTACT MANAGER ===
+// Function to get contacts from localStorage
 function getContacts() {
     return JSON.parse(localStorage.getItem("ghostContacts") || "[]");
 }
 
+// Function to save contacts to localStorage
 function saveContacts(contacts) {
     localStorage.setItem("ghostContacts", JSON.stringify(contacts));
 }
 
+// Function to add a contact
 function addContact(name, phone) {
     const contacts = getContacts();
     const contact = {
@@ -704,6 +747,7 @@ function addContact(name, phone) {
     return `📞 Contact added: ${name} - ${phone}`;
 }
 
+// Function to display contacts in a table
 function showContacts() {
     const contacts = getContacts();
     if (contacts.length === 0) {
@@ -733,7 +777,7 @@ function showContacts() {
     return table;
 }
 
-// === PASSWORD GENERATOR ===
+// Function to generate a random password
 function generatePassword(length = 12) {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?";
     let password = "";
@@ -743,15 +787,17 @@ function generatePassword(length = 12) {
     return `🔑 Generated password: <strong>${password}</strong><br>📋 Copy and save it securely!`;
 }
 
-// === DAILY PLANNER ===
+// Function to get daily plan from localStorage
 function getDailyPlan() {
     return JSON.parse(localStorage.getItem("ghostDailyPlan") || "[]");
 }
 
+// Function to save daily plan to localStorage
 function saveDailyPlan(plan) {
     localStorage.setItem("ghostDailyPlan", JSON.stringify(plan));
 }
 
+// Function to add a daily plan item
 function addPlanItem(item) {
     const plan = getDailyPlan();
     const planItem = {
@@ -764,6 +810,7 @@ function addPlanItem(item) {
     return `📅 Plan item added: "${item}"`;
 }
 
+// Function to display daily plan in a table
 function showDailyPlan() {
     const plan = getDailyPlan();
     if (plan.length === 0) {
@@ -794,15 +841,17 @@ function showDailyPlan() {
     return table;
 }
 
-// === HEALTH TRACKER ===
+// Function to get health logs from localStorage
 function getHealthLogs() {
     return JSON.parse(localStorage.getItem("ghostHealthLogs") || "[]");
 }
 
+// Function to save health logs to localStorage
 function saveHealthLogs(logs) {
     localStorage.setItem("ghostHealthLogs", JSON.stringify(logs));
 }
 
+// Function to log a health activity
 function logHealth(activity, amount) {
     const logs = getHealthLogs();
     const log = {
@@ -815,6 +864,7 @@ function logHealth(activity, amount) {
     return `💪 Health log added: ${activity} - ${amount}`;
 }
 
+// Function to display health logs in a table
 function showHealthLogs() {
     const logs = getHealthLogs();
     if (logs.length === 0) {
@@ -844,15 +894,17 @@ function showHealthLogs() {
     return table;
 }
 
-// === FLASHCARD SYSTEM ===
+// Function to get flashcards from localStorage
 function getFlashcards() {
     return JSON.parse(localStorage.getItem("ghostFlashcards") || "[]");
 }
 
+// Function to save flashcards to localStorage
 function saveFlashcards(flashcards) {
     localStorage.setItem("ghostFlashcards", JSON.stringify(flashcards));
 }
 
+// Function to add a flashcard
 function addFlashcard(question, answer) {
     const flashcards = getFlashcards();
     const flashcard = {
@@ -865,6 +917,7 @@ function addFlashcard(question, answer) {
     return `📚 Flashcard added!<br>❓ ${question}<br>✅ ${answer}`;
 }
 
+// Function to display flashcards
 function showFlashcards() {
     const flashcards = getFlashcards();
     if (flashcards.length === 0) {
@@ -886,7 +939,7 @@ function showFlashcards() {
     return cards;
 }
 
-// === DAILY LIFE CONVERSATIONS ===
+// Daily conversation triggers
 const dailyConversations = {
     greetings: [
         "hi", "hello", "hey", "hlo", "namaste", "good morning", "good afternoon",
@@ -924,13 +977,11 @@ const dailyConversations = {
     ]
 };
 
-// Core Logic with Improved Response System
+// Core function to generate response based on user message
 function getResponse(message) {
     const lower = message.toLowerCase().trim();
     const words = lower.split(/\s+/);
 
-    // Handle prompt system first
-    // If we were waiting for task input
     if (awaitingTaskInput) {
         awaitingTaskInput = false;
         const task = message.trim();
@@ -942,20 +993,17 @@ function getResponse(message) {
         return `✅ Task added: "${task}"`;
     }
 
-    // If we were waiting for reminder text
     if (awaitingReminderInput) {
         awaitingReminderInput = false;
         awaitingReminderTime = true;
         tempReminderText = message.trim();
-        return `⏰ "${tempReminderText}" kab remind karu? (Example: 5 minutes, 1 hour, tomorrow)`;
+        return `⏰ "${tempReminderText}" When To Remind You? (Example: 5 minutes, 1 hour, tomorrow)`;
     }
 
-    // If we were waiting for reminder time
     if (awaitingReminderTime) {
         awaitingReminderTime = false;
         const timeText = message.trim();
 
-        // Parse time - simple parser
         let ms = 0;
         let displayTime = "";
 
@@ -981,8 +1029,7 @@ function getResponse(message) {
                 displayTime = `${seconds} second${seconds !== 1 ? 's' : ''}`;
             }
         } else {
-            // Default to 5 minutes if can't parse
-            ms = 300000; // 5 minutes
+            ms = 300000;
             displayTime = "5 minutes";
         }
 
@@ -1008,16 +1055,14 @@ function getResponse(message) {
         }
     }
 
-    // Stop command
     if (dailyConversations.stop.some(cmd => lower.includes(cmd))) {
         synth.cancel();
         isSpeaking = false;
         return "Okay, I'm stopping right away. 😶";
     }
 
-    // ✅ Clear chat with password
     if (dailyConversations.clear.some(cmd => lower.includes(cmd))) {
-        const password = prompt("🔐 Enter password to clear chat:\n\nPassword: Arpit@232422");
+        const password = prompt("🔐 Enter password to clear chat:\n\n");
         if (password === "Arpit@232422") {
             Array.from(chatArea.children).forEach(child => {
                 if (child !== typingIndicator) {
@@ -1031,16 +1076,26 @@ function getResponse(message) {
         }
     }
 
-    // Help command
     if (dailyConversations.help.some(cmd => lower.includes(cmd))) {
         addMessage(featureList, false);
         safeSpeak(featureVoiceMessage);
         return;
     }
 
-    // === NEW FEATURES TRIGGERS ===
+    // Voice switching command
+    if (lower.includes("switch voice to")) {
+        const voiceMatch = lower.match(/switch voice to (.+)/);
+        if (voiceMatch) {
+            const requestedVoice = voiceMatch[1].trim();
+            switchVoice(requestedVoice);
+            return;
+        }
+    }
 
-    // HABIT TRACKER
+    if (lower.includes("list voices")) {
+        return listVoices();
+    }
+
     if (lower.includes("track habit") || lower.includes("log habit")) {
         const habitMatch = message.match(/(?:track|log) habit:?\s*(.+)/i);
         if (habitMatch && habitMatch[1]) {
@@ -1054,7 +1109,6 @@ function getResponse(message) {
         return showHabits();
     }
 
-    // EXPENSE MANAGER
     if (lower.includes("add expense") || lower.includes("log expense")) {
         const expenseMatch = message.match(/(?:add|log) expense:?\s*(\d+(?:\.\d+)?)\s*(?:for|on)?\s*(.+)/i);
         if (expenseMatch && expenseMatch[1] && expenseMatch[2]) {
@@ -1068,7 +1122,6 @@ function getResponse(message) {
         return showExpenses();
     }
 
-    // STUDY TIMER (POMODORO)
     if (lower.includes("start pomodoro") || lower.includes("pomodoro timer")) {
         const timeMatch = message.match(/(\d+)\s*(?:min|minute|minutes)/i);
         const minutes = timeMatch ? parseInt(timeMatch[1]) : 25;
@@ -1081,7 +1134,6 @@ function getResponse(message) {
         return startPomodoro(minutes);
     }
 
-    // MOOD JOURNAL
     if (lower.includes("log mood") || lower.includes("track mood")) {
         const moodMatch = message.match(/(?:log|track) mood:?\s*(.+)/i);
         if (moodMatch && moodMatch[1]) {
@@ -1095,7 +1147,6 @@ function getResponse(message) {
         return showMoodHistory();
     }
 
-    // GOAL TRACKER
     if (lower.includes("set goal") || lower.includes("add goal")) {
         const goalMatch = message.match(/(?:set|add) goal:?\s*(.+)/i);
         if (goalMatch && goalMatch[1]) {
@@ -1109,7 +1160,6 @@ function getResponse(message) {
         return showGoals();
     }
 
-    // CONTACT MANAGER
     if (lower.includes("add contact")) {
         const contactMatch = message.match(/add contact:?\s*(.+?)\s+(\d+)/i);
         if (contactMatch && contactMatch[1] && contactMatch[2]) {
@@ -1123,12 +1173,10 @@ function getResponse(message) {
         return showContacts();
     }
 
-    // PASSWORD GENERATOR
     if (lower.includes("generate password") || lower.includes("create password")) {
         return generatePassword();
     }
 
-    // DAILY PLANNER
     if (lower.includes("plan day") || lower.includes("add plan")) {
         const planMatch = message.match(/(?:plan day|add plan):?\s*(.+)/i);
         if (planMatch && planMatch[1]) {
@@ -1142,7 +1190,6 @@ function getResponse(message) {
         return showDailyPlan();
     }
 
-    // HEALTH TRACKER
     if (lower.includes("log water") || lower.includes("log health")) {
         const healthMatch = message.match(/(?:log water|log health):?\s*(.+)/i);
         if (healthMatch && healthMatch[1]) {
@@ -1156,7 +1203,6 @@ function getResponse(message) {
         return showHealthLogs();
     }
 
-    // FLASHCARD SYSTEM
     if (lower.includes("add flashcard")) {
         const flashcardMatch = message.match(/add flashcard:?\s*(.+?)\s*[-–—]\s*(.+)/i);
         if (flashcardMatch && flashcardMatch[1] && flashcardMatch[2]) {
@@ -1170,7 +1216,6 @@ function getResponse(message) {
         return showFlashcards();
     }
 
-    // === QUIZ TRIGGERS ===
     const quizTriggers = [
         "let's play quiz", "play quiz", "start quiz", "quiz time", "quiz",
         "i want to play quiz", "take a quiz", "give me a quiz"
@@ -1186,8 +1231,7 @@ function getResponse(message) {
         return;
     }
 
-    // Exit quiz - FIXED
-    if (["exit quiz", "stop quiz", "quit quiz", "end quiz", "leave quiz"].includes(lower)) {
+    if (["exit quiz", "stop quiz", "quit quiz", "end quiz", "leave quiz", "Exit"].includes(lower)) {
         if (quizActive) {
             quizActive = false;
             clearQuizTimer();
@@ -1197,27 +1241,23 @@ function getResponse(message) {
         }
     }
 
-    // Handle quiz answer - FIXED WITH SOUNDS
     if (quizActive) {
-        // Check if user is trying to exit quiz
-        if (["exit quiz", "stop quiz", "quit quiz", "end quiz", "leave quiz"].includes(lower)) {
-            quizActive = false;
-            clearQuizTimer();
-            return "👋 Quiz exited. You can start again anytime!";
-        }
-
         const ans = message.trim().toUpperCase();
         const correct = quizQuestions[quizIndex].answer;
 
         clearQuizTimer();
 
-        if (ans === correct) {
+        const isCorrect =
+            ans === correct ||
+            ans === (correct.charCodeAt(0) - 64).toString();
+
+        if (isCorrect) {
             quizScore++;
             addMessage("✅ Correct!", false);
-            playCorrectSound(); // Sound for correct
+            playCorrectSound();
         } else {
             addMessage(`❌ Wrong! Correct answer was: ${correct}`, false);
-            playWrongSound(); // Sound for wrong
+            playWrongSound();
         }
 
         quizIndex++;
@@ -1230,7 +1270,6 @@ function getResponse(message) {
         return;
     }
 
-    // === ROCK PAPER SCISSORS GAME - FIXED ===
     const rpsTriggers = [
         "rps", "rock paper scissors", "play rps", "lets play game", "game",
         "play game", "lets play rps", "play rock paper scissors"
@@ -1241,11 +1280,10 @@ function getResponse(message) {
     }
 
     if (rpsGameActive) {
-        const userChoice = lower.trim(); // Trim spaces
+        const userChoice = lower.trim();
         const choices = ["rock", "paper", "scissors"];
         const botChoice = choices[Math.floor(Math.random() * 3)];
 
-        // Better choice validation
         if (!["rock", "paper", "scissors"].includes(userChoice)) {
             return "❌ Invalid choice! Choose: Rock, Paper, or Scissors.";
         }
@@ -1267,7 +1305,6 @@ function getResponse(message) {
         return `You: ${userChoice.toUpperCase()}<br>Ghost: ${botChoice.toUpperCase()}<br><br>👉 ${result}`;
     }
 
-    // Greetings
     if (dailyConversations.greetings.some(g => lower.includes(g))) {
         const greetings = [
             "Hi there! I'm Ghost, your AI assistant. How can I help you today?",
@@ -1289,7 +1326,7 @@ function getResponse(message) {
     }
 
     if (dailyConversations.yourName.some(q => lower.includes(q))) {
-        return "I'm Ghost — your AI friend!";
+        return "I'm Ghost — An Ai Assistant! ";
     }
 
     if (dailyConversations.owner.some(q => lower.includes(q))) {
@@ -1300,7 +1337,6 @@ function getResponse(message) {
         return "Your Name Is Arpit!";
     }
 
-    // Time & Date
     if (dailyConversations.time.some(q => lower.includes(q))) {
         return `The current time is ${new Date().toLocaleTimeString()}.`;
     }
@@ -1309,7 +1345,6 @@ function getResponse(message) {
         return `Today is ${new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.`;
     }
 
-    // Math
     if (lower.includes("what is") || lower.includes("solve") || lower.includes("calculate") || lower.includes("=")) {
         const mathRegex = /^([+\-]?(?:\d+\.?\d*|\.\d+)(?:[+\-*/](?:\d+\.?\d*|\.\d+))*)$/;
         const cleanExpr = message.replace(/what is|solve|calculate|=/gi, "").trim();
@@ -1330,20 +1365,10 @@ function getResponse(message) {
         }
     }
 
-    // === REMINDERS - Enhanced ===
     if (lower.includes("remind me") || lower.includes("set reminder") || lower.includes("alert me in") || lower.includes("notify me") || lower.includes("add reminder")) {
-        // If user just said "add reminder" or "set reminder" without details
-        if (lower.trim() === "add reminder" || lower.trim() === "set reminder" ||
-            (lower.includes("add reminder") && message.trim().toLowerCase() === "add reminder") ||
-            (lower.includes("set reminder") && message.trim().toLowerCase() === "set reminder")) {
-            awaitingReminderInput = true;
-            return "🔔 Kya reminder set karu?";
-        }
-
-        // Normal reminder parsing (existing logic)
         const remindMatch1 = lower.match(/remind me to (.+?) in (\d+) (seconds?|minutes?|hours?)/);
         const remindMatch2 = lower.match(/set a reminder for (\d+) (seconds?|minutes?|hours?)(?: to (.+?))?$/);
-        const remindMatch3 = lower.match(/in (\d+) (seconds?|minutes?|hours?) remind me to (.+?)(?:$|\.)/);
+        const remindMatch3 = lower.match(/in (\d+) (seconds?|minutes?) remind me to (.+?)(?:$|\.)/);
 
         if (remindMatch1 || remindMatch2 || remindMatch3) {
             let task, timeValue, unit;
@@ -1356,7 +1381,12 @@ function getResponse(message) {
                 [_, timeValue, unit, task] = remindMatch3;
             }
 
-            task = task?.trim() || "this task";
+            task = task?.trim() || null;
+            if (!task) {
+                awaitingReminderInput = true;
+                return "🔔 For What is the reminder you'd like to set?";
+            }
+
             const value = parseInt(timeValue);
             let ms;
 
@@ -1381,31 +1411,25 @@ function getResponse(message) {
             return `✅ I'll remind you to "${task}" in ${value} ${displayUnit}${value !== 1 ? 's' : ''}.`;
         }
 
-        // If reminder command but no match, ask for details
         awaitingReminderInput = true;
-        return "🔔 Kya reminder set karu?";
+        return "🔔 For What is the reminder you'd like to set?";
     }
 
-
-    // === TASK MANAGER (To-Do List) - Enhanced ===
     if (lower.startsWith("add:") ||
         lower.includes("add task") ||
         lower.includes("create task") ||
         lower.includes("add new task") ||
         lower.includes("create new task") ||
-        lower.includes("make a task")) {
-        // If user just said "add task" without specifying what
-        if (lower.trim() === "add task" || lower.includes("add task") && message.trim().toLowerCase() === "add task") {
-            awaitingTaskInput = true;
-            return "📝 Kya task add karu?";
-        }
+        lower.includes("make a task") ||
+        lower.includes("add a task")) {
+        const taskMatch = message.match(/(?:add task|create task|add new task|create new task|make a task|add a task):?\s*(.+)/i) ||
+            message.match(/add:(.+)/i);
+        let task = taskMatch ? taskMatch[1].trim() :
+            message.replace(/add task|create task|add new task|create new task|make a task|add a task/gi, "").trim();
 
-        // Normal task adding with direct input
-        const task = message.slice(message.indexOf(":") + 1).trim() ||
-            message.replace(/add task|create task|add new task|create new task|make a task/gi, "").trim();
-        if (!task) {
+        if (!task || lower.trim() === "add task" || lower.trim() === "add a task") {
             awaitingTaskInput = true;
-            return "📝 Kya task add karu?";
+            return "📝 What task should I add?";
         }
 
         const tasks = getTasks();
@@ -1445,7 +1469,6 @@ function getResponse(message) {
         return table;
     }
 
-    // Notes
     if (lower.startsWith("note:") ||
         lower.startsWith("save:") ||
         lower.includes("save note") ||
@@ -1468,7 +1491,6 @@ function getResponse(message) {
         return "📒 Your notes:<br>" + notes.map(n => `• "${n.text}" <small>(${n.time})</small>`).join("<br>");
     }
 
-    // BMI
     if (lower.includes("weight") && lower.includes("height") || lower.includes("bmi") || lower.includes("body mass index")) {
         const weightMatch = lower.match(/weight.*?(\d+(\.\d+)?)/i);
         const heightMatch = lower.match(/height.*?(\d+(\.\d+)?)/i);
@@ -1482,7 +1504,6 @@ function getResponse(message) {
         }
     }
 
-    // YouTube Music
     if (lower.includes("play") && (lower.includes("youtube") || lower.includes("song") || lower.includes("music") || lower.includes("listen to"))) {
         const queryMatch = message.match(/play (.+?) on youtube/i);
         const songName = queryMatch ? queryMatch[1] : message.replace(/play|song|music|listen to|on youtube/gi, "").trim();
@@ -1493,7 +1514,6 @@ function getResponse(message) {
         }
     }
 
-    // Default response with better fallback options
     const defaultResponses = [
         "I'm here to help! Try asking 'what can you do' to see my features.",
         "I can help you with many things! Ask me about math, time, tasks, or just chat!",
@@ -1504,7 +1524,7 @@ function getResponse(message) {
     return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
 }
 
-// Send Message with Faster Response Time
+// Function to send user message and get response
 function sendMessage() {
     const message = userInput.value.trim();
     if (!message) return;
@@ -1513,17 +1533,16 @@ function sendMessage() {
     userInput.value = "";
     showTyping();
 
-    // Faster response time
     setTimeout(() => {
         const response = getResponse(message);
         if (response !== undefined) {
             addMessage(response, false);
             safeSpeak(response);
         }
-    }, 300 + Math.random() * 200); // Reduced from 1000ms
+    }, 300 + Math.random() * 200);
 }
 
-// === VOICE TOGGLE FEATURE ===
+// Voice toggle variables and functions
 let voiceEnabled = JSON.parse(localStorage.getItem("ghostVoiceEnabled")) !== false;
 
 function updateVoiceButton() {
@@ -1544,24 +1563,30 @@ if (voiceButton) {
 
 function safeSpeak(text) {
     if (voiceEnabled && text) {
+        const voices = synth.getVoices();
+        if (voices.length === 0) {
+            console.warn("No voices loaded yet, retrying...");
+            setTimeout(() => safeSpeak(text), 500); // Retry after 500ms
+            return;
+        }
         speak(text);
     }
 }
 
 updateVoiceButton();
 
-// Event Listeners
+// Event listeners for send button and enter key
 sendButton.addEventListener("click", sendMessage);
 userInput.addEventListener("keypress", (e) => {
     if (e.key === "Enter") sendMessage();
 });
 
-// Request notification permission
+// Request notification permission if available
 if ("Notification" in window) {
     Notification.requestPermission();
 }
 
-// Load voices and chat history on first click
+// Load voices and history on first interaction
 document.addEventListener("click", () => {
     if (synth.getVoices().length === 0) {
         synth.getVoices();
@@ -1572,16 +1597,16 @@ document.addEventListener("click", () => {
         window.chatHistoryLoaded = true;
 
         if (chatArea.children.length <= 1) {
-            const welcomeMsg = "Hello! I'm Ghost, your AI assistant. How can I help you today?";
+            const welcomeMsg = "Hello! I'm Ghost, How can I help you today?";
             addMessage(welcomeMsg, false);
         }
     }
 }, { once: true });
 
-// Hide typing indicator on load
+// Hide typing indicator initially
 hideTyping();
 
-// ✅ MOBILE FIX: Adjust height on load and resize
+// Function to adjust app height for mobile devices
 (function () {
     function setAppHeight() {
         document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
@@ -1589,3 +1614,30 @@ hideTyping();
     setAppHeight();
     window.addEventListener('resize', setAppHeight);
 })();
+
+// Placeholder for playOnYouTube function
+function playOnYouTube(songName) {
+    window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(songName)}`, '_blank');
+}
+
+// Placeholder for playCorrectSound and playWrongSound
+function playCorrectSound() {
+    // Play correct answer sound
+}
+
+function playWrongSound() {
+    // Play wrong answer sound
+}
+
+// Function to get tasks from localStorage
+function getTasks() {
+    return JSON.parse(localStorage.getItem("ghostTasks") || "[]");
+}
+
+// Function to save tasks to localStorage
+function saveTasks(tasks) {
+    localStorage.setItem("ghostTasks", JSON.stringify(tasks));
+}
+
+// Active reminders array
+let activeReminders = [];
