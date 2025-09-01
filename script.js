@@ -12,6 +12,10 @@ let awaitingReminderInput = false;
 let awaitingReminderTime = false;
 let tempReminderText = "";
 
+// Debounce timer for auto-sending typed messages
+let typingTimeout = null;
+const TYPING_DELAY = 1000; // Delay in ms before auto-sending
+
 // Check for required DOM elements and log error if missing
 if (!chatArea || !userInput || !sendButton || !micButton) {
     console.error("Chat elements not found. Check your HTML IDs.");
@@ -74,7 +78,7 @@ function loadChatHistory() {
             const timeStr = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
             messageDiv.innerHTML = `
-                <div class="message-sender">${msg.isUser ? "Ghost" : "Ghost"}</div>
+                <div class="message-sender">${msg.isUser ? "You" : "Ghost"}</div>
                 <div class="message-bubble">${msg.content}</div>
                 <div class="message-time">${timeStr}</div>
             `;
@@ -129,7 +133,7 @@ function detectPlatform() {
     return 'default';
 }
 
-// Modified: Improved voice fallback for mobile devices
+// Function to get the preferred voice based on platform and selection
 function getPreferredVoice() {
     const voices = synth.getVoices();
     const platform = detectPlatform();
@@ -142,22 +146,13 @@ function getPreferredVoice() {
     }
 
     const selectedVoice = voices.find(v => v.name === currentVoiceName);
-    if (!selectedVoice) {
-        console.warn(`Voice "${currentVoiceName}" not found, falling back to any English voice`);
-        // Fallback to any en-US voice or first available voice
-        return voices.find(v => v.lang === 'en-US') || voices[0] || null;
-    }
-    return selectedVoice;
+    return selectedVoice || voices.find(v => v.lang.startsWith('en-')) || voices[0];
 }
 
 // Load voices when available
 synth.onvoiceschanged = () => {
     const voices = synth.getVoices();
-    console.log("Available voices:", voices.map(v => ({
-        name: v.name,
-        lang: v.lang,
-        default: v.default
-    })));
+    console.log("Available voices:", voices.map(v => `${v.name} (${v.lang})`));
     if (!currentVoiceName) {
         const platform = detectPlatform();
         currentVoiceName = (platformVoices[platform] || platformVoices.default)[0].voiceName;
@@ -190,14 +185,7 @@ function speak(text) {
     }
 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    const selectedVoice = getPreferredVoice();
-    if (!selectedVoice) {
-        console.error("No voice available for speech synthesis");
-        isSpeaking = false;
-        return;
-    }
-    utterance.voice = selectedVoice;
-    console.log("Selected voice:", selectedVoice.name); // Debug voice selection
+    utterance.voice = getPreferredVoice();
     utterance.rate = 0.95; // Slightly slower for natural feel
     utterance.pitch = 1.1; // Slightly higher for clarity
     utterance.volume = 1;
@@ -249,7 +237,6 @@ function switchVoice(voiceName) {
     if (voice) {
         currentVoiceName = voice.voiceName;
         const sampleText = "This is a sample in the new voice.";
-        console.log(`Switching to voice: ${voice.name} (${voice.voiceName})`);
         addMessage(`🔊 Voice switched to ${voice.name}. Sample: ${sampleText}`, false);
         safeSpeak(sampleText);
     } else {
@@ -261,66 +248,55 @@ function switchVoice(voiceName) {
 function listVoices() {
     const platform = detectPlatform();
     const voiceList = platformVoices[platform] || platformVoices.default;
-    return `Available voices: ${voiceList.map(v => v.name).join(', ')}. Note: Voice availability depends on your device and browser.`;
+    return `Available voices: ${voiceList.map(v => v.name).join(', ')}`;
 }
 
-// Modified: Speech recognition setup with extended timeout and sensitivity
+// Speech recognition setup and variables
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition;
 let isMicOn = false;
-let recognitionStartTime = null;
-let noSpeechTimeout = null;
 
 if (SpeechRecognition) {
     recognition = new SpeechRecognition();
     recognition.lang = 'en-US';
-    recognition.interimResults = true; // Changed: Enable interim results for slower speech
+    recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     recognition.continuous = false;
 
     micButton.addEventListener("click", () => {
-        isMicOn = !isMicOn;
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(() => {
+            isMicOn = !isMicOn;
 
-        if (isMicOn) {
-            try {
-                recognition.start();
-                recognitionStartTime = Date.now();
-                micButton.innerHTML = "🔴";
-                micButton.style.color = "#ff4757";
-                userInput.placeholder = "Listening... (Click mic to stop)";
-                userInput.disabled = true;
-
-                // New: Set 10-second timeout for no speech
-                noSpeechTimeout = setTimeout(() => {
-                    if (isMicOn) {
-                        recognition.stop();
-                        addMessage("❌ No speech detected. Mic stopped.", false);
-                        isMicOn = false;
-                        micButton.innerHTML = "🎤";
-                        micButton.style.color = "#aebac1";
-                        userInput.placeholder = "Type or click mic to speak...";
-                        userInput.disabled = false;
-                    }
-                }, 10000); // 10 seconds timeout
-            } catch (e) {
-                isMicOn = false;
+            if (isMicOn) {
+                try {
+                    recognition.start();
+                    micButton.innerHTML = "🔴";
+                    micButton.style.color = "#ff4757";
+                    userInput.placeholder = "Listening... (Click mic to stop)";
+                    userInput.disabled = true;
+                } catch (e) {
+                    isMicOn = false;
+                    micButton.innerHTML = "🎤";
+                    micButton.style.color = "#aebac1";
+                    userInput.disabled = false;
+                    addMessage("❌ Microphone access denied", false);
+                }
+            } else {
+                try {
+                    recognition.stop();
+                } catch (e) {
+                    console.log("Recognition already stopped");
+                }
                 micButton.innerHTML = "🎤";
                 micButton.style.color = "#aebac1";
+                userInput.placeholder = "Type or click mic to speak...";
                 userInput.disabled = false;
-                addMessage("❌ Microphone access denied", false);
             }
-        } else {
-            try {
-                recognition.stop();
-                clearTimeout(noSpeechTimeout);
-            } catch (e) {
-                console.log("Recognition already stopped");
-            }
-            micButton.innerHTML = "🎤";
-            micButton.style.color = "#aebac1";
-            userInput.placeholder = "Type or click mic to speak...";
-            userInput.disabled = false;
-        }
+        }).catch(() => {
+            addMessage("Mic permission denied. Please enable it in browser settings.", false);
+            micButton.disabled = true;
+            micButton.style.color = "#ff4757"; // Indicate disabled
+        });
     });
 
     recognition.addEventListener("result", (e) => {
@@ -331,13 +307,12 @@ if (SpeechRecognition) {
             .trim();
 
         if (transcript) {
-            clearTimeout(noSpeechTimeout); // Clear timeout if speech detected
             userInput.value = transcript;
             setTimeout(() => {
-                if (isMicOn && e.results[0].isFinal) { // Only send on final result
+                if (isMicOn) {
                     sendMessage();
                 }
-            }, 1000); // Changed: Increased delay for slower speech
+            }, 500);
         }
     });
 
@@ -347,19 +322,6 @@ if (SpeechRecognition) {
                 if (isMicOn && !isSpeaking) {
                     try {
                         recognition.start();
-                        recognitionStartTime = Date.now();
-                        // New: Reset no-speech timeout
-                        noSpeechTimeout = setTimeout(() => {
-                            if (isMicOn) {
-                                recognition.stop();
-                                addMessage("❌ No speech detected. Mic stopped.", false);
-                                isMicOn = false;
-                                micButton.innerHTML = "🎤";
-                                micButton.style.color = "#aebac1";
-                                userInput.placeholder = "Type or click mic to speak...";
-                                userInput.disabled = false;
-                            }
-                        }, 10000);
                     } catch (e) {
                         console.log("Could not restart recognition");
                     }
@@ -367,7 +329,6 @@ if (SpeechRecognition) {
             }, 500);
         } else {
             if (!isSpeaking) {
-                clearTimeout(noSpeechTimeout);
                 micButton.innerHTML = "🎤";
                 micButton.style.color = "#aebac1";
                 userInput.placeholder = "Type or click mic to speak...";
@@ -378,10 +339,18 @@ if (SpeechRecognition) {
 
     recognition.addEventListener("error", (event) => {
         console.error("Speech recognition error:", event.error);
-        if (isMicOn && event.error !== 'no-speech') { // Modified: Ignore no-speech errors handled by timeout
+        if (isMicOn && event.error === 'no-speech') {
+            // Auto-disable mic on no-speech error
+            isMicOn = false;
+            recognition.stop();
+            micButton.innerHTML = "🎤";
+            micButton.style.color = "#aebac1";
+            userInput.placeholder = "Type or click mic to speak...";
+            userInput.disabled = false;
+            addMessage("🎤 No speech detected, microphone turned off.", false);
+        } else if (isMicOn) {
             addMessage(`❌ Mic error: ${event.error}`, false);
             isMicOn = false;
-            clearTimeout(noSpeechTimeout);
             micButton.innerHTML = "🎤";
             micButton.style.color = "#aebac1";
             userInput.disabled = false;
@@ -410,7 +379,7 @@ let featureList = `
 ✅ <strong>Jokes & Fun:</strong> "Tell me a joke"<br>
 ✅ <strong>Reminders:</strong> "Remind me to drink water in 5 min"<br>
 ✅ <strong>Quiz:</strong> "Let's play quiz", "Start quiz", "Quiz time"<br>
-✅ <strong>Rock Paper Scissors:</strong> "Play rps", "RPS", "Let's play a game"<br>
+✅ <strong>Rock Paper Scissors:</strong> "Play rps", "RPS", "Let's play a game" (loops until exit)<br>
 ✅ <strong>Habit Tracker:</strong> "Track habit: Meditation", "Show habits"<br>
 ✅ <strong>Expense Manager:</strong> "Add expense: 50 for food", "Show expenses"<br>
 ✅ <strong>Study Timer:</strong> "Start pomodoro", "25 min study timer"<br>
@@ -421,7 +390,7 @@ let featureList = `
 ✅ <strong>Daily Planner:</strong> "Plan day: Study 2 hours", "Show daily plan"<br>
 ✅ <strong>Health Tracker:</strong> "Log water: 500ml", "Show health log"<br>
 ✅ <strong>Flashcard System:</strong> "Add flashcard: Capital of India - New Delhi"<br>
-✅ <strong>Voice Switching:</strong> "Switch voice to David", "List voices" (availability depends on device and browser)<br>
+✅ <strong>Voice Switching:</strong> "Switch voice to David", "List voices"<br>
 ✅ <strong>Stop:</strong> Say "Stop" to cancel anything<br><br>
 Just ask me anything! 😊
 `.trim();
@@ -491,8 +460,10 @@ function endQuiz() {
     safeSpeak(`Quiz completed! You scored ${quizScore} out of ${quizQuestions.length}.`);
 }
 
-// Rock Paper Scissors game variable
+// Rock Paper Scissors game variables
 let rpsGameActive = false;
+let rpsUserScore = 0;
+let rpsBotScore = 0;
 
 // Function to get habits from localStorage
 function getHabits() {
@@ -1315,16 +1286,26 @@ function getResponse(message) {
     ];
     if (rpsTriggers.some(trigger => lower === trigger)) {
         rpsGameActive = true;
-        return "🎮 Let's play Rock-Paper-Scissors!<br>Choose: <strong>Rock</strong>, <strong>Paper</strong>, or <strong>Scissors</strong>.";
+        rpsUserScore = 0;
+        rpsBotScore = 0;
+        return `🎮 Let's play Rock-Paper-Scissors! Score: You ${rpsUserScore} - Ghost ${rpsBotScore}<br>Choose: <strong>Rock</strong>, <strong>Paper</strong>, or <strong>Scissors</strong>. Type "exit" to quit.`;
     }
 
     if (rpsGameActive) {
+        if (["exit", "quit", "stop"].includes(lower)) {
+            rpsGameActive = false;
+            const finalScore = `👋 Game ended! Final Score: You ${rpsUserScore} - Ghost ${rpsBotScore}`;
+            rpsUserScore = 0;
+            rpsBotScore = 0;
+            return finalScore;
+        }
+
         const userChoice = lower.trim();
         const choices = ["rock", "paper", "scissors"];
         const botChoice = choices[Math.floor(Math.random() * 3)];
 
-        if (!["rock", "paper", "scissors"].includes(userChoice)) {
-            return "❌ Invalid choice! Choose: Rock, Paper, or Scissors.";
+        if (!choices.includes(userChoice)) {
+            return "❌ Invalid choice! Choose: Rock, Paper, or Scissors. Type 'exit' to quit.";
         }
 
         let result;
@@ -1335,13 +1316,14 @@ function getResponse(message) {
             (userChoice === "paper" && botChoice === "rock") ||
             (userChoice === "scissors" && botChoice === "paper")
         ) {
+            rpsUserScore++;
             result = "You win! 🎉";
         } else {
+            rpsBotScore++;
             result = "You lose! 😢";
         }
 
-        rpsGameActive = false;
-        return `You: ${userChoice.toUpperCase()}<br>Ghost: ${botChoice.toUpperCase()}<br><br>👉 ${result}`;
+        return `You: ${userChoice.toUpperCase()}<br>Ghost: ${botChoice.toUpperCase()}<br><br>👉 ${result}<br>Score: You ${rpsUserScore} - Ghost ${rpsBotScore}<br>Play again: Choose Rock, Paper, or Scissors. Type 'exit' to quit.`;
     }
 
     if (dailyConversations.greetings.some(g => lower.includes(g))) {
@@ -1456,18 +1438,17 @@ function getResponse(message) {
 
     if (lower.startsWith("add:") ||
         lower.includes("add task") ||
-        lower.includes("add another") ||
         lower.includes("create task") ||
         lower.includes("add new task") ||
         lower.includes("create new task") ||
         lower.includes("make a task") ||
         lower.includes("add a task")) {
-        const taskMatch = message.match(/(?:add task|create task|add new task|create new task|make a task|add a task| add another):?\s*(.+)/i) ||
+        const taskMatch = message.match(/(?:add task|create task|add new task|create new task|make a task|add a task):?\s*(.+)/i) ||
             message.match(/add:(.+)/i);
         let task = taskMatch ? taskMatch[1].trim() :
-            message.replace(/add task|create task|add new task|create new task|make a task|add another|add a task/gi, "").trim();
+            message.replace(/add task|create task|add new task|create new task|make a task|add a task/gi, "").trim();
 
-        if (!task || lower.trim() === "add task" || lower.trim() === "add another" || lower.trim() === "add a task") {
+        if (!task || lower.trim() === "add task" || lower.trim() === "add a task") {
             awaitingTaskInput = true;
             return "📝 What task should I add?";
         }
@@ -1601,24 +1582,14 @@ if (voiceButton) {
     });
 }
 
-// Modified: Enhanced safeSpeak for mobile compatibility
 function safeSpeak(text) {
     if (voiceEnabled && text) {
-        // Force voice loading for mobile browsers
-        synth.getVoices();
         const voices = synth.getVoices();
         if (voices.length === 0) {
             console.warn("No voices loaded yet, retrying...");
-            // New: Increased retry delay for mobile devices
-            setTimeout(() => safeSpeak(text), 1000);
+            setTimeout(() => safeSpeak(text), 1000); // Retry after 1000ms
             return;
         }
-        if (!getPreferredVoice()) {
-            console.error("No voices available after retries.");
-            addMessage("❌ No voices available for speech output.", false);
-            return;
-        }
-        console.log("Speaking text:", text); // New: Debug log for voice output
         speak(text);
     }
 }
@@ -1629,6 +1600,17 @@ updateVoiceButton();
 sendButton.addEventListener("click", sendMessage);
 userInput.addEventListener("keypress", (e) => {
     if (e.key === "Enter") sendMessage();
+});
+
+// Auto-send typed messages with debounce
+userInput.addEventListener("input", () => {
+    if (isMicOn) return; // Don't auto-send while mic is active
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+        if (userInput.value.trim() && !isMicOn) {
+            sendMessage();
+        }
+    }, TYPING_DELAY);
 });
 
 // Request notification permission if available
