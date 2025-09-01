@@ -182,7 +182,7 @@ function stripHtml(html) {
 
 // Function to speak text using speech synthesis
 function speak(text) {
-    if (isSpeaking || !voiceEnabled) return;
+    if (isSpeaking) return;
     synth.cancel(); // Cancel any ongoing speech
     isSpeaking = true;
     const textToSpeak = stripHtml(removeEmojis(text));
@@ -405,8 +405,7 @@ let featureList = `
 ✅ <strong>Flashcard System:</strong> "Add flashcard: Capital of India - New Delhi"<br>
 ✅ <strong>Voice Switching:</strong> "Switch voice to David", "List voices"<br>
 ✅ <strong>Stop:</strong> Say "Stop" to cancel anything<br>
-✅ <strong>Daily Life Companion:</strong> Ask me anything about daily life, my opinions, or random facts!<br>
-✨ <strong>AI Brain (Ollama/Llama 3 Integration - Coming Soon!):</strong> For more complex or general questions, Ghost will soon use a powerful AI model running locally on your machine.<br><br>
+✅ <strong>Daily Life Companion:</strong> Ask me anything about daily life, my opinions, or random facts!<br><br>
 Just ask me anything! 😊
 `.trim();
 const featureVoiceMessage = "Here are the things I can help you with!";
@@ -691,6 +690,102 @@ function startPomodoro(minutes = 25) {
     return `⏱️ Pomodoro timer started for ${minutes} minutes!`;
 }
 
+// Function to start meditation session
+function startMeditation(minutes = 5) {
+    const meditationMessages = [
+        "🧘‍♀️ Find a comfortable position and close your eyes...",
+        "🌸 Take a deep breath in... and slowly breathe out...",
+        "💫 Focus on your breathing. Let your thoughts flow naturally...",
+        "🌊 Feel the calm washing over you...",
+        "✨ You are present in this moment...",
+        "🕯️ Let go of any tension in your body...",
+        "🌙 Continue breathing deeply and peacefully..."
+    ];
+    
+    let messageIndex = 0;
+    const intervalTime = (minutes * 60 * 1000) / meditationMessages.length;
+    
+    // Start with first message
+    addMessage(meditationMessages[messageIndex], false);
+    safeSpeak(meditationMessages[messageIndex]);
+    messageIndex++;
+    
+    const meditationInterval = setInterval(() => {
+        if (messageIndex < meditationMessages.length) {
+            addMessage(meditationMessages[messageIndex], false);
+            safeSpeak(meditationMessages[messageIndex]);
+            messageIndex++;
+        } else {
+            clearInterval(meditationInterval);
+            const completionMsg = `🙏 Meditation session complete! You meditated for ${minutes} minutes. Well done!`;
+            addMessage(completionMsg, false);
+            safeSpeak(completionMsg);
+            if (Notification.permission === "granted") {
+                new Notification("Ghost - Meditation", { body: "Meditation session completed!" });
+            }
+        }
+    }, intervalTime);
+    
+    return `🧘‍♀️ Starting ${minutes}-minute meditation session. Find a quiet space and relax...`;
+}
+
+// Function to start a general timer
+function startTimer(minutes) {
+    const timerEndTime = Date.now() + minutes * 60 * 1000;
+    
+    const timerInterval = setInterval(() => {
+        const remainingTime = timerEndTime - Date.now();
+        if (remainingTime <= 0) {
+            clearInterval(timerInterval);
+            const completionMsg = `⏰ Timer finished! ${minutes} minutes have passed.`;
+            addMessage(completionMsg, false);
+            safeSpeak(completionMsg);
+            if (Notification.permission === "granted") {
+                new Notification("Ghost - Timer", { body: `Timer finished! ${minutes} minutes have passed.` });
+            }
+        }
+    }, 1000);
+    
+    return `⏱️ Timer set for ${minutes} minutes!`;
+}
+
+// Spanish vocabulary for teaching
+const spanishWords = [
+    { spanish: "Hola", english: "Hello" },
+    { spanish: "Adiós", english: "Goodbye" },
+    { spanish: "Gracias", english: "Thank you" },
+    { spanish: "Por favor", english: "Please" },
+    { spanish: "Sí", english: "Yes" },
+    { spanish: "No", english: "No" },
+    { spanish: "Agua", english: "Water" },
+    { spanish: "Comida", english: "Food" },
+    { spanish: "Casa", english: "House" },
+    { spanish: "Familia", english: "Family" },
+    { spanish: "Amigo", english: "Friend" },
+    { spanish: "Tiempo", english: "Time" },
+    { spanish: "Dinero", english: "Money" },
+    { spanish: "Trabajo", english: "Work" },
+    { spanish: "Escuela", english: "School" },
+    { spanish: "Libro", english: "Book" },
+    { spanish: "Coche", english: "Car" },
+    { spanish: "Perro", english: "Dog" },
+    { spanish: "Gato", english: "Cat" },
+    { spanish: "Amor", english: "Love" }
+];
+
+// Function to teach Spanish words
+function teachSpanishWords(count = 5) {
+    const selectedWords = spanishWords.slice(0, Math.min(count, spanishWords.length));
+    let response = `📚 Here are ${selectedWords.length} Spanish words:<br><br>`;
+    
+    selectedWords.forEach((word, index) => {
+        response += `${index + 1}. <strong>${word.spanish}</strong> - ${word.english}<br>`;
+    });
+    
+    response += `<br>💡 Try using these in sentences or ask me to quiz you on them!`;
+    return response;
+}
+
 // Function to get mood logs from localStorage
 function getMoods() {
     return JSON.parse(localStorage.getItem("ghostMoods") || "[]");
@@ -871,7 +966,7 @@ function showContacts() {
 }
 
 // Function to generate a random password
-function generatePassword(length =23 ) {
+function generatePassword(length = 12) {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.><>?";
     let password = "";
     for (let i = 0; i < length; i++) {
@@ -1090,7 +1185,7 @@ async function processCommandQueue() {
     // Use a promise to wait for a bit
     await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 200));
 
-    const response = getResponse(command);
+    const response = await getResponse(command, false);
     if (response !== undefined) {
         addMessage(response, false);
         safeSpeak(response);
@@ -1367,6 +1462,24 @@ async function getResponse(message, inInteractiveMode) {
         return startPomodoro(minutes);
     }
 
+    // Meditation
+    if (lower.includes("start meditation") || lower.includes("meditation") || lower.includes("meditate") || lower.includes("begin meditation") || lower.includes("meditation session")) {
+        const timeMatch = message.match(/(\d+)\s*(?:min|minute|minutes)/i);
+        const minutes = timeMatch ? parseInt(timeMatch[1]) : 5;
+        return startMeditation(minutes);
+    }
+
+    // General Timer
+    if (lower.includes("set timer") || lower.includes("start timer") || lower.includes("timer for")) {
+        const timeMatch = message.match(/(\d+)\s*(?:min|minute|minutes)/i);
+        if (timeMatch) {
+            const minutes = parseInt(timeMatch[1]);
+            return startTimer(minutes);
+        } else {
+            return "❌ Please specify timer duration. Example: 'Set timer for 5 minutes'";
+        }
+    }
+
     // Mood Journal
     if (lower.includes("log mood") || lower.includes("track mood") || lower.includes("add mood") || lower.includes("how am i feeling") || lower.includes("my mood today")) {
         const moodMatch = message.match(/(?:log|track|add) mood:?\s*(.+)/i);
@@ -1471,6 +1584,13 @@ async function getResponse(message, inInteractiveMode) {
     }
     if (lower.includes("show flashcards") || lower.includes("view flashcards") || lower.includes("my flashcards") || lower.includes("list flashcards") || lower.includes("flashcard list")) {
         return showFlashcards();
+    }
+
+    // Spanish Teaching
+    if (lower.includes("teach me spanish") || lower.includes("spanish words") || lower.includes("learn spanish") || lower.includes("show me spanish")) {
+        const countMatch = message.match(/(\d+)\s*spanish\s*words?/i) || message.match(/teach\s*me\s*(\d+)/i);
+        const count = countMatch ? parseInt(countMatch[1]) : 5;
+        return teachSpanishWords(Math.min(count, 20)); // Limit to 20 words max
     }
 
     // Quiz
@@ -1871,6 +1991,56 @@ async function getResponse(message, inInteractiveMode) {
         }
     }
 
+    // Unit Converter
+    if (lower.includes("km") && (lower.includes("miles") || lower.includes("mile"))) {
+        const kmMatch = message.match(/(\d+(?:\.\d+)?)\s*km/i);
+        if (kmMatch) {
+            const km = parseFloat(kmMatch[1]);
+            const miles = (km * 0.621371).toFixed(2);
+            return `📏 ${km} km is ${miles} miles.`;
+        }
+    }
+    if (lower.includes("miles") && lower.includes("km")) {
+        const milesMatch = message.match(/(\d+(?:\.\d+)?)\s*miles?/i);
+        if (milesMatch) {
+            const miles = parseFloat(milesMatch[1]);
+            const km = (miles * 1.60934).toFixed(2);
+            return `📏 ${miles} miles is ${km} km.`;
+        }
+    }
+    if (lower.includes("kg") && (lower.includes("pounds") || lower.includes("lbs"))) {
+        const kgMatch = message.match(/(\d+(?:\.\d+)?)\s*kg/i);
+        if (kgMatch) {
+            const kg = parseFloat(kgMatch[1]);
+            const pounds = (kg * 2.20462).toFixed(2);
+            return `⚖️ ${kg} kg is ${pounds} pounds.`;
+        }
+    }
+    if ((lower.includes("pounds") || lower.includes("lbs")) && lower.includes("kg")) {
+        const poundsMatch = message.match(/(\d+(?:\.\d+)?)\s*(?:pounds?|lbs?)/i);
+        if (poundsMatch) {
+            const pounds = parseFloat(poundsMatch[1]);
+            const kg = (pounds * 0.453592).toFixed(2);
+            return `⚖️ ${pounds} pounds is ${kg} kg.`;
+        }
+    }
+    if (lower.includes("celsius") && (lower.includes("fahrenheit") || lower.includes("f"))) {
+        const celsiusMatch = message.match(/(\d+(?:\.\d+)?)\s*(?:celsius|c)/i);
+        if (celsiusMatch) {
+            const celsius = parseFloat(celsiusMatch[1]);
+            const fahrenheit = ((celsius * 9/5) + 32).toFixed(1);
+            return `🌡️ ${celsius}°C is ${fahrenheit}°F.`;
+        }
+    }
+    if (lower.includes("fahrenheit") && (lower.includes("celsius") || lower.includes("c"))) {
+        const fahrenheitMatch = message.match(/(\d+(?:\.\d+)?)\s*(?:fahrenheit|f)/i);
+        if (fahrenheitMatch) {
+            const fahrenheit = parseFloat(fahrenheitMatch[1]);
+            const celsius = ((fahrenheit - 32) * 5/9).toFixed(1);
+            return `🌡️ ${fahrenheit}°F is ${celsius}°C.`;
+        }
+    }
+
     // YouTube
     if (lower.includes("play") && (lower.includes("youtube") || lower.includes("song") || lower.includes("music") || lower.includes("listen to"))) {
         const queryMatch = message.match(/play (.+?) on youtube/i);
@@ -1897,12 +2067,7 @@ async function getResponse(message, inInteractiveMode) {
 
             if (rates[from] && rates[to]) {
                 const result = (amount / rates[from]) * rates[to];
-                /* The above code is a JavaScript function that takes in three parameters: `amount`,
-                `from`, and `to`. It then calculates an approximate conversion from one currency
-                (`from`) to another currency (`to`) based on the given `amount`. The result is
-                formatted as a string that includes the original amount, the original currency
-                (converted to uppercase), the converted amount (rounded to two decimal places), and
-                the target currency (converted to uppercase). */
+             
                 return `💰 ${amount} ${from.toUpperCase()} is approximately ${result.toFixed(2)} ${to.toUpperCase()}.`;
             } else {
                 return "❌ I can only convert between USD, INR, and EUR for now.";
@@ -1920,20 +2085,7 @@ async function getResponse(message, inInteractiveMode) {
         return "❌ Please specify what the QR code should contain. Example: 'Generate QR for https://google.com'";
     }
 
-    // Default response
-    // If no specific command matched, try to send to Ollama
-    if (ollamaEnabled && !inInteractiveMode) {
-        // Fetch chat history for context
-        const chatHistory = JSON.parse(localStorage.getItem("ghostChatHistory") || "[]");
-        // Limit history to a reasonable amount to avoid excessively long prompts
-        const recentHistory = chatHistory.slice(-10); // Get last 10 messages
-
-        const ollamaPrompt = recentHistory.map(entry => `User: ${entry.isUser ? entry.content : `Assistant: ${entry.content}`}`).join("\n") + `\nUser: ${message}`; 
-        
-        // Asynchronously send to Ollama and add response
-        const ollamaResponse = await sendToOllama(ollamaPrompt);
-        return ollamaResponse; 
-    }
+    // Default response - removed Ollama integration
 
     const defaultResponses = [
         "I'm still learning this feature. I'll be able to do this soon. Please try asking 'help' to see what I can do!",
@@ -1963,17 +2115,20 @@ function sendMessage() {
     } else if (rpsGameActive && commands.length > 0) {
         // If RPS is active, process the first command as RPS input, then queue the rest
         const rpsInput = commands.shift();
-        const response = getResponse(rpsInput); // Process RPS input immediately
-        if (response !== undefined) {
-            addMessage(response, false);
-            safeSpeak(response);
-        }
-        if (commands.length > 0) {
-            commandQueue.push(...commands); // Add remaining commands to queue
-            if (!isProcessingQueue) {
-                processCommandQueue();
+        showTyping();
+        setTimeout(async () => {
+            const response = await getResponse(rpsInput, inInteractiveMode); // Process RPS input immediately
+            if (response !== undefined) {
+                addMessage(response, false);
+                safeSpeak(response);
             }
-        }
+            if (commands.length > 0) {
+                commandQueue.push(...commands); // Add remaining commands to queue
+                if (!isProcessingQueue) {
+                    processCommandQueue();
+                }
+            }
+        }, 300 + Math.random() * 200);
     } else {
         showTyping();
         setTimeout(async () => {
@@ -2148,9 +2303,7 @@ function removeTask(taskId) {
 // Active reminders array
 let activeReminders = [];
 
-// Ollama Integration Variables
-const ollamaEndpoint = "http://localhost:11434/api/generate"; // Default Ollama API endpoint
-let ollamaEnabled = true; // Toggle for Ollama integration
+
 
 // Function to get notes from localStorage
 function getNotes() {
@@ -2308,97 +2461,4 @@ const dailyLifeQA = [
     }
 ];
 
-// Function to send message to Ollama and get a streamed response
-async function sendToOllama(prompt) {
-    if (!ollamaEnabled) return "";
-
-    try {
-        showTyping(); // Indicate that Ghost is thinking
-        const response = await fetch(ollamaEndpoint, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                model: "llama3", // Specify Llama 3 model
-                prompt: prompt,
-                stream: true,
-            }),
-        });
-
-        if (!response.ok) {
-            hideTyping();
-            return `❌ Ollama error: ${response.status} ${response.statusText}. Is Ollama running and Llama 3 installed?`;
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder("utf-8");
-        let fullResponse = "";
-        let buffer = "";
-
-        // Clear the existing typing indicator and prepare for streamed text
-        if (typingIndicator) typingIndicator.style.display = "none";
-        const messageDiv = document.createElement("div");
-        messageDiv.className = "message ghost-message";
-        messageDiv.innerHTML = `
-            <div class="message-sender">Ghost</div>
-            <div class="message-bubble"><span id="ollama-response-text"></span></div>
-            <div class="message-time">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-        `;
-        chatArea.appendChild(messageDiv);
-        chatArea.scrollTop = chatArea.scrollHeight;
-        const ollamaResponseText = document.getElementById("ollama-response-text");
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-                break;
-            }
-            buffer += decoder.decode(value, { stream: true });
-
-            // Process buffer line by line, as chunks might contain multiple JSON objects
-            let lastNewlineIndex;
-            while ((lastNewlineIndex = buffer.indexOf('\n')) !== -1) {
-                const line = buffer.substring(0, lastNewlineIndex);
-                buffer = buffer.substring(lastNewlineIndex + 1);
-
-                if (line.trim() === "") continue;
-
-                try {
-                    const json = JSON.parse(line);
-                    if (json.response) {
-                        fullResponse += json.response;
-                        if (ollamaResponseText) {
-                            ollamaResponseText.innerHTML = fullResponse;
-                            chatArea.scrollTop = chatArea.scrollHeight;
-                        }
-                    }
-                    if (json.done) {
-                        hideTyping();
-                        // Save the full response to chat history once done
-                        const history = JSON.parse(localStorage.getItem("ghostChatHistory") || "[]");
-                        history.push({ content: fullResponse, isUser: false, timestamp: Date.now() });
-                        localStorage.setItem("ghostChatHistory", JSON.stringify(history));
-                        safeSpeak(fullResponse); // Speak the full response once received
-                        return;
-                    }
-                } catch (e) {
-                    console.error("Error parsing Ollama stream chunk:", e, "Chunk:", line);
-                    // If parsing error, still try to append as plain text for user to see something
-                    fullResponse += line + " ";
-                    if (ollamaResponseText) {
-                        ollamaResponseText.innerHTML = fullResponse;
-                        chatArea.scrollTop = chatArea.scrollHeight;
-                    }
-                }
-            }
-        }
-        hideTyping();
-        return fullResponse;
-
-    } catch (error) {
-        hideTyping();
-        console.error("Error sending to Ollama:", error);
-        return "❌ Could not connect to Ollama. Please ensure it's running on `http://localhost:11434` and the `llama3` model is installed.";
-    }
-}
+// Removed Ollama function - sendToOllama
