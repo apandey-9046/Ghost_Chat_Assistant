@@ -1973,8 +1973,8 @@ function sendMessage() {
         }
     } else {
         showTyping();
-        setTimeout(() => {
-            const response = getResponse(message);
+        setTimeout(async () => {
+            const response = await getResponse(message, inInteractiveMode); // Pass inInteractiveMode
             if (response !== undefined) {
                 addMessage(response, false);
                 safeSpeak(response);
